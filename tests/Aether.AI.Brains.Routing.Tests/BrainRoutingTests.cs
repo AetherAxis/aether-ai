@@ -7,7 +7,7 @@ using Aether.AI.Harness.Tools;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 
-namespace Aether.AI.Harness.Tests;
+namespace Aether.AI.Brains.Routing.Tests;
 
 public class BrainRoutingTests
 {

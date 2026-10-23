@@ -10,9 +10,10 @@ using Aether.AI.Harness.Skills;
 using Aether.AI.Harness.Tools;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
-using NRules.Fluent.Dsl;
+// 命名空间在 Aether.AI.Brains.Rule.* 下，裸 `Rule` 会解析成命名空间而非 NRules 基类——显式取别名。
+using NRulesRule = global::NRules.Fluent.Dsl.Rule;
 
-namespace Aether.AI.Harness.Tests;
+namespace Aether.AI.Brains.Rule.NRules.Tests;
 
 /// <summary>
 /// NRules 作为「可选声明式规则后端」的适配器契约：
@@ -26,8 +27,8 @@ public class NRulesBrainTests
     private const string RuleTypes = """
         {
           "ruleTypes": [
-            "Aether.AI.Harness.Tests.NRulesQueryRule",
-            "Aether.AI.Harness.Tests.NRulesReplyRule"
+            "Aether.AI.Brains.Rule.NRules.Tests.NRulesQueryRule",
+            "Aether.AI.Brains.Rule.NRules.Tests.NRulesReplyRule"
           ]
         }
         """;
@@ -203,7 +204,7 @@ public class NRulesBrainTests
 }
 
 /// <summary>测试用 NRules 规则：首步查证券代码并调用工具。</summary>
-public sealed class NRulesQueryRule : Rule
+public sealed class NRulesQueryRule : NRulesRule
 {
     public override void Define()
     {
@@ -215,7 +216,7 @@ public sealed class NRulesQueryRule : Rule
 }
 
 /// <summary>测试用 NRules 规则：拿到工具结果后回复。</summary>
-public sealed class NRulesReplyRule : Rule
+public sealed class NRulesReplyRule : NRulesRule
 {
     public override void Define()
     {

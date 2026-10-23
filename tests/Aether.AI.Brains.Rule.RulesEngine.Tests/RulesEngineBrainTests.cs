@@ -10,7 +10,7 @@ using Aether.AI.Harness.Tools;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace Aether.AI.Harness.Tests;
+namespace Aether.AI.Brains.Rule.RulesEngine.Tests;
 
 /// <summary>
 /// Microsoft RulesEngine 作为「可选规则后端」的适配器契约：

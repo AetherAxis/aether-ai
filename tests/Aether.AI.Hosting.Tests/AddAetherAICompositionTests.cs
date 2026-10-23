@@ -9,7 +9,7 @@ using Aether.AI.Harness.Tools;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace Aether.AI.Memory.Tests;
+namespace Aether.AI.Hosting.Tests;
 
 /// <summary>
 /// <c>AddAetherAI</c> DI 组合钉子（2026-10-23 修复的回归测试）：零 LLM 宿主（纯规则 agent——

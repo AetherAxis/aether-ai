@@ -1,7 +1,7 @@
 using Aether.AI.Brains.Abstractions;
 using Aether.AI.Core.Agents;
 
-namespace Aether.AI.Harness.Tests;
+namespace Aether.AI.Brains.Abstractions.Tests;
 
 public class BrainModelTests
 {

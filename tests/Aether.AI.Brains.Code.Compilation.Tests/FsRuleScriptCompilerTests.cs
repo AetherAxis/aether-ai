@@ -5,7 +5,7 @@ using Aether.AI.Harness.Agents;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 
-namespace Aether.AI.Harness.Tests;
+namespace Aether.AI.Brains.Code.Compilation.Tests;
 
 /// <summary>
 /// F# 代码规则大脑（<c>.coderule.fs</c> → FCS 编译 → <c>IBrain</c>）测试。镜像

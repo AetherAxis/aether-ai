@@ -5,7 +5,7 @@ using Aether.AI.Harness.Agents;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 
-namespace Aether.AI.Harness.Tests;
+namespace Aether.AI.Brains.Code.Tests;
 
 /// <summary>
 /// 代码规则大脑（<see cref="CodeRuleBrain"/>）测试：验证「C# 源码 → Roslyn 编译 → 代码大脑」管线，

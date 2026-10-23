@@ -7,7 +7,7 @@ using Aether.AI.Harness.Tools;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 
-namespace Aether.AI.Harness.Tests;
+namespace Aether.AI.Brains.Rule.Tests;
 
 /// <summary>
 /// 验证规则 agent 的工具审批：RequireToolApproval=true 时，Dangerous 工具（DeleteFile）

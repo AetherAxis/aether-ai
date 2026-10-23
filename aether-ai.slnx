@@ -23,6 +23,16 @@
   <Project Path="tests/Consumers/Aether.AI.BrainMatrix.Consumer/Aether.AI.BrainMatrix.Consumer.csproj" />
   <Project Path="tests/Consumers/Aether.AI.PrecompiledCode.Consumer/Aether.AI.PrecompiledCode.Consumer.csproj" />
   <Project Path="tests/Consumers/Aether.AI.CSharpCompilation.Consumer/Aether.AI.CSharpCompilation.Consumer.csproj" />
+  <Project Path="tests/Aether.AI.Core.Tests/Aether.AI.Core.Tests.csproj" />
+  <Project Path="tests/Aether.AI.Brains.Abstractions.Tests/Aether.AI.Brains.Abstractions.Tests.csproj" />
+  <Project Path="tests/Aether.AI.Brains.Rule.Tests/Aether.AI.Brains.Rule.Tests.csproj" />
+  <Project Path="tests/Aether.AI.Brains.Rule.RulesEngine.Tests/Aether.AI.Brains.Rule.RulesEngine.Tests.csproj" />
+  <Project Path="tests/Aether.AI.Brains.Rule.NRules.Tests/Aether.AI.Brains.Rule.NRules.Tests.csproj" />
+  <Project Path="tests/Aether.AI.Brains.Code.Tests/Aether.AI.Brains.Code.Tests.csproj" />
+  <Project Path="tests/Aether.AI.Brains.Code.Compilation.Tests/Aether.AI.Brains.Code.Compilation.Tests.csproj" />
+  <Project Path="tests/Aether.AI.Brains.Routing.Tests/Aether.AI.Brains.Routing.Tests.csproj" />
+  <Project Path="tests/Aether.AI.Brains.Llm.Tests/Aether.AI.Brains.Llm.Tests.csproj" />
+  <Project Path="tests/Aether.AI.Hosting.Tests/Aether.AI.Hosting.Tests.csproj" />
   <Project Path="tests/Aether.AI.Harness.Tests/Aether.AI.Harness.Tests.csproj" />
   <Project Path="tests/Aether.AI.Mcp.Tests/Aether.AI.Mcp.Tests.csproj" />
   <Project Path="tests/Aether.AI.Memory.Tests/Aether.AI.Memory.Tests.csproj" />

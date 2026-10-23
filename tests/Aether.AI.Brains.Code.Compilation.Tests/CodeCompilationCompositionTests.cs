@@ -7,7 +7,7 @@ using Aether.AI.Core.Agents;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 
-namespace Aether.AI.Harness.Tests;
+namespace Aether.AI.Brains.Code.Compilation.Tests;
 
 public class CodeCompilationCompositionTests
 {

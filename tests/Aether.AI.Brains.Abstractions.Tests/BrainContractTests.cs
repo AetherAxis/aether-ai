@@ -10,7 +10,7 @@ using Aether.AI.Harness.Skills;
 using Aether.AI.Harness.Tools;
 using Microsoft.Extensions.AI;
 
-namespace Aether.AI.Harness.Tests;
+namespace Aether.AI.Brains.Abstractions.Tests;
 
 /// <summary>
 /// 大脑契约收敛后的钉子：

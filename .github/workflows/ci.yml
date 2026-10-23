@@ -36,8 +36,10 @@ jobs:
         run: dotnet build aether-ai.slnx -c Release
         working-directory: aether-ai
 
-      # 2026-10-23 随迁测试：Harness（规则 agent/F# 编译器/会话/工具审批/技能注册表）+ Mcp（配置解析）
-      # + Memory（InMemory/Sqlite 双后端）。零真实模型调用——规则 agent 路径全本地闭包。
+      # 测试按被测项目拆分：Core / Brains.Abstractions / Brains.Rule{,.RulesEngine,.NRules} /
+      # Brains.Code{,.Compilation} / Brains.Routing / Brains.Llm / Harness / Hosting / Mcp / Memory 共 13 个程序集。
+      # 零真实模型调用（LLM 路径用脚本化 IChatClient 替身）、零真实 MCP 连接（只测配置与失败隔离）；
+      # 代码大脑的编译用例走仓内 Roslyn/FCS，不访问外部端点。
       - name: Test
         run: dotnet test aether-ai.slnx -c Release --no-build
         working-directory: aether-ai

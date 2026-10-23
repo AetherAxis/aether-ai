@@ -5,7 +5,7 @@ using Aether.AI.Harness.Skills;
 using Aether.AI.Harness.Tools;
 using Microsoft.Extensions.AI;
 
-namespace Aether.AI.Harness.Tests;
+namespace Aether.AI.Brains.Abstractions.Tests;
 
 /// <summary>
 /// 同一 <see cref="EngineKind"/> 下多实现（规则后端）的选择契约：

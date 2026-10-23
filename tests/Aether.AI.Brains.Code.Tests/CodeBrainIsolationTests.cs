@@ -5,7 +5,7 @@ using Aether.AI.Harness.Skills;
 using Aether.AI.Harness.Tools;
 using Microsoft.Extensions.AI;
 
-namespace Aether.AI.Harness.Tests;
+namespace Aether.AI.Brains.Code.Tests;
 
 /// <summary>
 /// 代码大脑跨会话状态隔离回归（2026-10-23 修复的钉子）：

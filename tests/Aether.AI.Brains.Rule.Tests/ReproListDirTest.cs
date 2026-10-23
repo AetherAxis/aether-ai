@@ -7,7 +7,7 @@ using Aether.AI.Harness.Tools;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 
-namespace Aether.AI.Harness.Tests;
+namespace Aether.AI.Brains.Rule.Tests;
 
 /// <summary>
 /// 回归：规则 agent 显式 <c>Memory=Off</c> 时，工具调用后仍能命中收尾 reply 步骤（不误报「无匹配规则」）。

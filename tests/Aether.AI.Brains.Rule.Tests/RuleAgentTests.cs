@@ -6,7 +6,7 @@ using Aether.AI.Harness.Agents;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 
-namespace Aether.AI.Harness.Tests;
+namespace Aether.AI.Brains.Rule.Tests;
 
 /// <summary>
 /// Rule Agent 1.0 刺探测试：验证「规则大脑代替 LLM、复用 MAF HarnessAgent 生态」的接缝。

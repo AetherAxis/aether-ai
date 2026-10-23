@@ -5,7 +5,7 @@ using Aether.AI.Harness.Skills;
 using Aether.AI.Harness.Tools;
 using Microsoft.Extensions.AI;
 
-namespace Aether.AI.Harness.Tests;
+namespace Aether.AI.Brains.Llm.Tests;
 
 /// <summary>
 /// LLM 大脑路径的行为钉子（2026-10-23 新增——此前全仓 IChatClient 测试桩均为抛异常 Null 桩，

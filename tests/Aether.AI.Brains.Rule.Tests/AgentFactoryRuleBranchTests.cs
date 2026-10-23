@@ -7,7 +7,7 @@ using Aether.AI.Harness.Tools;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 
-namespace Aether.AI.Harness.Tests;
+namespace Aether.AI.Brains.Rule.Tests;
 
 /// <summary>
 /// Rule Agent：验证 <see cref="AgentFactory.Create"/> 的规则分支端到端——

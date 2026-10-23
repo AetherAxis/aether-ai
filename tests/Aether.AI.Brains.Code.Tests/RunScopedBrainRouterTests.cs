@@ -2,7 +2,7 @@ using Aether.AI.Brains.Abstractions;
 using Aether.AI.Brains.Code;
 using Microsoft.Extensions.AI;
 
-namespace Aether.AI.Harness.Tests;
+namespace Aether.AI.Brains.Code.Tests;
 
 public class RunScopedBrainRouterTests
 {
