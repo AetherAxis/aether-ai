@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <ForbiddenAssemblyPattern>^(OpenAI|Microsoft\.Agents\.AI\.OpenAI|FSharp\.Compiler)</ForbiddenAssemblyPattern>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\Aether.AI.Brains.Code.Compilation.CSharp\Aether.AI.Brains.Code.Compilation.CSharp.csproj" />
+  </ItemGroup>
+
+  <Import Project="..\DependencyBoundary.targets" />
+</Project>

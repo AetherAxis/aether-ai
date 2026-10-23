@@ -1,6 +1,10 @@
 using Aether.AI.Brains.Abstractions;
 using Aether.AI.Brains.Routing;
 using Aether.AI.Core.Agents;
+using Aether.AI.Harness.Agents;
+using Aether.AI.Harness.Skills;
+using Aether.AI.Harness.Tools;
+using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 
 namespace Aether.AI.Harness.Tests;
@@ -53,6 +57,87 @@ public class BrainRoutingTests
 
         Assert.Equal(BrainMatchKind.NotMatched, result.Kind);
         Assert.True(result.Reason?.Contains("timed out", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task Higher_priority_matcher_wins_without_evaluating_lower_priority()
+    {
+        var calls = new List<string>();
+        var client = new RuleFirstRoutingChatClient(
+            new AgentDefinition { Id = "priority" },
+            new IBrainMatcher[]
+            {
+                new RecordingMatcher("low", 1, calls, BrainMatchResult.Matched()),
+                new RecordingMatcher("high", 10, calls, BrainMatchResult.Matched()),
+            },
+            new ReplyBrain("rule"),
+            () => new ReplyClient("llm"));
+
+        Assert.Equal("rule", await Collect(client, "anything"));
+        Assert.Equal(new[] { "high" }, calls);
+    }
+
+    [Fact]
+    public async Task Approval_resume_stays_with_rule_and_never_creates_llm()
+    {
+        var llmCreates = 0;
+        var tools = new ToolRegistry();
+        tools.Register("DeleteFile", "删除文件", "测试",
+            _ => AIFunctionFactory.Create((Func<string, string>)(path => $"deleted:{path}"), "DeleteFile"),
+            ToolApprovalLevel.Dangerous);
+        var definition = new AgentDefinition
+        {
+            Id = "routed-approval",
+            Name = "RoutedApproval",
+            Engine = EngineKind.Llm,
+            EnableBrainRouting = true,
+            RequireToolApproval = true,
+            Tools = new[] { "DeleteFile" },
+            Rules = new RuleProgram
+            {
+                Steps = new()
+                {
+                    new RuleStep
+                    {
+                        Match = new() { OnUserRegex = "^删(.+)$", MaxToolCalls = 0 },
+                        Action = new() { Tool = "DeleteFile", Args = new() { ["path"] = "{user.1}" } },
+                    },
+                    new RuleStep
+                    {
+                        Match = new() { MinToolCalls = 1 },
+                        Action = new() { ReplyText = "已删除：{result}" },
+                    },
+                },
+            },
+        };
+        var routing = new RuleFirstRoutingChatClient(
+            definition,
+            new[] { new RuleProgramMatcher("routed-approval") },
+            new Aether.AI.Brains.Rule.RuleProgramBrain(definition.Rules),
+            () =>
+            {
+                Interlocked.Increment(ref llmCreates);
+                return new ReplyClient("llm");
+            });
+        var factory = new AgentFactory(
+            new ReplyClientFactory("unused"), tools, new SkillRegistry(),
+            routingFactory: new FixedRoutingFactory(routing));
+        var agent = factory.Create(definition);
+        var session = await agent.CreateSessionAsync();
+
+        ToolApprovalRequestContent? approval = null;
+        await foreach (var update in agent.RunStreamingAsync("删/tmp/a.txt", session))
+            approval ??= update.Contents.OfType<ToolApprovalRequestContent>().FirstOrDefault();
+        Assert.NotNull(approval);
+
+        var responseMessage = new ChatMessage { Role = ChatRole.User };
+        responseMessage.Contents.Add((AIContent)approval!.CreateResponse(approved: true, reason: null));
+        var finalText = "";
+        await foreach (var update in agent.RunStreamingAsync(new[] { responseMessage }, session))
+            finalText += update.Text;
+
+        Assert.Contains("已删除：deleted:/tmp/a.txt", finalText);
+        Assert.Equal(0, llmCreates);
     }
 
     [Fact]
@@ -164,6 +249,32 @@ public class BrainRoutingTests
     {
         public ValueTask<IReadOnlyList<AIContent>> DecideAsync(BrainContext context, CancellationToken cancellationToken)
             => throw new InvalidOperationException("rule failed");
+    }
+
+    private sealed class RecordingMatcher(
+        string id,
+        int priority,
+        List<string> calls,
+        BrainMatchResult result) : IBrainMatcher
+    {
+        public string Id => id;
+        public int Priority => priority;
+
+        public BrainMatchResult Match(AgentDefinition definition, ChatMessage input)
+        {
+            calls.Add(id);
+            return result;
+        }
+    }
+
+    private sealed class FixedRoutingFactory(IChatClient client) : IBrainRoutingClientFactory
+    {
+        public IChatClient Create(AgentDefinition definition) => client;
+    }
+
+    private sealed class ReplyClientFactory(string text) : Aether.AI.Brains.Abstractions.IChatClientFactory
+    {
+        public IChatClient Create(string? modelId) => new ReplyClient(text);
     }
 
     private sealed class ToolBrain(string callId, string finalText) : IBrain

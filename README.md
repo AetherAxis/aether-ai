@@ -73,4 +73,6 @@ dotnet build aether-ai.slnx -c Release
 dotnet test aether-ai.slnx -c Release --no-build
 ```
 
-当前变更环境没有可用 `dotnet`，因此本次只完成了 XML、项目引用路径、引用无环和补丁格式的静态检查；编译与测试结果以具备 .NET 10 SDK 的 CI/开发环境为准。真实模型端点、外部 MCP、GUI 与移动端仍需宿主侧验收。
+当前架构在 .NET SDK 10.0.301 下完成 Release 验收：25 个项目构建为 0 警告、0 错误，三个测试程序集共 180 项全部通过。
+
+`tests/Consumers` 中的三个最小消费项目随 solution 持续构建，并在 `ResolveReferences` 后校验实际依赖闭包：Rule-only 和预编译 Code-only 禁止 OpenAI、Roslyn、FCS；C# 动态编译允许 Roslyn，但禁止 OpenAI 与 FCS。真实模型端点、外部 MCP、GUI 与移动端仍需宿主侧验收。

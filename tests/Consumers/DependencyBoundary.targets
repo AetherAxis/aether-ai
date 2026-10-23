@@ -1,0 +1,10 @@
+<Project>
+  <Target Name="ValidateDependencyBoundary" BeforeTargets="CoreCompile" DependsOnTargets="ResolveReferences">
+    <ItemGroup>
+      <_ForbiddenReference Include="@(ReferencePath)"
+                           Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('%(Filename)', '$(ForbiddenAssemblyPattern)'))" />
+    </ItemGroup>
+    <Error Condition="'@(_ForbiddenReference)' != ''"
+           Text="Dependency boundary violation in $(MSBuildProjectName): @(_ForbiddenReference->'%(Filename)', ', ')." />
+  </Target>
+</Project>
