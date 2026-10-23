@@ -20,6 +20,7 @@
   <Project Path="src/Aether.AI.Memory.Sqlite/Aether.AI.Memory.Sqlite.csproj" />
   <Project Path="src/Aether.AI.Workflows/Aether.AI.Workflows.csproj" />
   <Project Path="tests/Consumers/Aether.AI.RuleOnly.Consumer/Aether.AI.RuleOnly.Consumer.csproj" />
+  <Project Path="tests/Consumers/Aether.AI.BrainMatrix.Consumer/Aether.AI.BrainMatrix.Consumer.csproj" />
   <Project Path="tests/Consumers/Aether.AI.PrecompiledCode.Consumer/Aether.AI.PrecompiledCode.Consumer.csproj" />
   <Project Path="tests/Consumers/Aether.AI.CSharpCompilation.Consumer/Aether.AI.CSharpCompilation.Consumer.csproj" />
   <Project Path="tests/Aether.AI.Harness.Tests/Aether.AI.Harness.Tests.csproj" />

@@ -90,6 +90,8 @@ dotnet build aether-ai.slnx -c Release
 dotnet test aether-ai.slnx -c Release --no-build
 ```
 
-当前架构在 .NET SDK 10.0.301 下完成 Release 验收：26 个项目构建为 0 警告、0 错误，三个测试程序集共 221 项全部通过（其中 42 项覆盖统一大脑接缝、非流式路径、多步路由链、定义校验、规则后端选择与 `rulesEngine` / `nRules` 适配器）。
+当前架构在 .NET SDK 10.0.301 下完成 Release 验收：28 个项目编译 0 警告、0 错误（全量重编时 NuGet 审计会对 OTel 1.12.0 的既有 pin 报 NU1902/NU1903，与代码无关），四个测试程序集共 221 项全部通过（其中 42 项覆盖统一大脑接缝、非流式路径、多步路由链、定义校验、规则后端选择与 `rulesEngine` / `nRules` 适配器）。
 
-`tests/Consumers` 中的三个最小消费项目随 solution 持续构建，并在 `ResolveReferences` 后校验实际依赖闭包：Rule-only 和预编译 Code-only 禁止 OpenAI、Roslyn、FCS；C# 动态编译允许 Roslyn，但禁止 OpenAI 与 FCS。CI 还会直接运行三个 Consumer，分别验证 Rule 工具执行、预编译 Code 工具执行和动态 C# 编译/注册/执行。真实模型端点、外部 MCP、GUI 与移动端仍需宿主侧验收。
+`tests/Consumers` 中的四个最小消费项目随 solution 持续构建（`BrainMatrix` 在一个宿主里同时注册 program / rulesEngine / nRules / Code / LLM 并逐个实跑，其中 LLM 用脚本化替身，本机无 key），并在 `ResolveReferences` 后校验实际依赖闭包：Rule-only 和预编译 Code-only 禁止 OpenAI、Roslyn、FCS；C# 动态编译允许 Roslyn，但禁止 OpenAI 与 FCS。CI 还会直接运行四个 Consumer，分别验证 Rule 工具执行、预编译 Code 工具执行、动态 C# 编译/注册/执行、同一宿主内五种大脑实现的逐个实跑。真实模型端点、外部 MCP、GUI 与移动端仍需宿主侧验收。
+
+具体工具实现（文件/搜索/HTTP/命令、链上钱包等）不放在本仓：工具是「业务/宿主 + AI」，归 ⑭ `aether-ai-integrations`（如 `Aether.SystemTools.AI` 的 `AddSystemTools()`）。本仓只提供工具契约 `ToolRegistry` / `ToolApprovalLevel` / `HostCapability`。

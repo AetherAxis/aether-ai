@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <!-- 该消费者刻意同时引用全部大脑实现（含 LLM/OpenAI），用于验证它们在同一个宿主里可共存、可切换；
+         依赖边界由其他三个消费者各自守（RuleOnly / PrecompiledCode / CSharpCompilation）。 -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\Aether.AI.Brains.Rule\Aether.AI.Brains.Rule.csproj" />
+    <ProjectReference Include="..\..\..\src\Aether.AI.Brains.Rule.RulesEngine\Aether.AI.Brains.Rule.RulesEngine.csproj" />
+    <ProjectReference Include="..\..\..\src\Aether.AI.Brains.Rule.NRules\Aether.AI.Brains.Rule.NRules.csproj" />
+    <ProjectReference Include="..\..\..\src\Aether.AI.Brains.Code.CSharp\Aether.AI.Brains.Code.CSharp.csproj" />
+    <ProjectReference Include="..\..\..\src\Aether.AI.Brains.Llm\Aether.AI.Brains.Llm.csproj" />
+    <ProjectReference Include="..\..\..\src\Aether.AI.Hosting\Aether.AI.Hosting.csproj" />
+  </ItemGroup>
+</Project>

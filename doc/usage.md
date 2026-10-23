@@ -175,6 +175,25 @@ services.AddFSharpBrainCompilation(); // FCS + ref-pack
 
 Code brain 生命周期按逻辑 turn 隔离：同一 run 的多次工具调用复用一个实例，不同 session 或下一 turn 使用新实例。作者字段不跨 turn 保留。工具结果通过 `CallId` 恢复原实例；取消和异常不会创建替代实例。
 
+## 工具从哪来
+
+本仓只提供工具契约：`ToolRegistry` / `ToolApprovalLevel`（Safe / Confirm / Dangerous）/ `HostCapability`
+（All / DesktopOnly / MobileOnly），以及 Harness 的调用-回填循环。**具体工具实现不放在平台层**——
+工具是「业务 / 宿主 + AI」，归 ⑭ `aether-ai-integrations`。
+
+```csharp
+// aether-ai-integrations/src/Aether.SystemTools.AI：文件/搜索/HTTP/命令 15 个工具
+services.AddRuleBrains();
+services.AddAetherAI().AddSystemTools();                            // 全量 15 个
+// services.AddAetherAI().AddSystemTools(includeCommandTools: false); // 可移植子集 13 个
+
+// 链上钱包适配器同理：AddLedgerTools(builder, walletSeedFilePath)
+```
+
+工具清单、审批等级、宿主能力表与 `Grep`/`Glob` 的显式 `path` 约束见
+[`aether-ai-integrations/README.md`](../../aether-ai-integrations/README.md)。可用规则大脑调用它们
+自验：`dotnet run --project aether-ai-integrations/tests/Consumers/Aether.SystemTools.AI.Consumer`。
+
 ## Rule 优先 Routing
 
 ```csharp
@@ -214,3 +233,20 @@ Routing 默认关闭，仅在显式设置 `EnableBrainRouting=true` 时启用。
 - 接缝与扩展方式见 [`brain-seam.md`](brain-seam.md)。
 - iOS 等禁止子进程的宿主不要启用文件 Skill 脚本或动态源码编译。
 - 当前仓内未验证真实模型端点、跨进程 MCP、GUI 和移动端；测试使用可控替身。
+
+## 验证现状
+
+同一宿主（`AddAetherAI()` 真实 DI 组合 + 工具 + 流式运行）已逐个实跑通过：
+
+| 大脑 | 验证方式 | 结果 |
+|---|---|---|
+| Rule `program` | 测试 + `BrainMatrix` consumer | 通过 |
+| Rule `rulesEngine` | 测试 + `BrainMatrix` consumer | 通过 |
+| Rule `nRules` | 测试 + `BrainMatrix` consumer | 通过 |
+| Code（预编译） | `PrecompiledCode` consumer + 测试 | 通过 |
+| Code（C# 动态编译） | `CSharpCompilation` consumer + 测试 | 通过 |
+| LLM | 脚本化 `IChatClient` 替身（无 key）；`LlmBrainFactory` 接线 + 工具回合闭环 | 接线通过，**真实端点未验** |
+
+`tests/Consumers/Aether.AI.BrainMatrix.Consumer` 在一个宿主里同时注册全部实现，用
+`BrainBackend(...)` 逐个跑通「用户输入 → 大脑决策 → 工具执行 → 回填 → 终答」，CI 会直接运行它。
+LLM 那一路是替身，验证的是同一条接缝上的接线与工具回合，不代表模型质量。

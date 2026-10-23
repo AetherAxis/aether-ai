@@ -47,4 +47,6 @@ jobs:
           dotnet run --project tests/Consumers/Aether.AI.RuleOnly.Consumer -c Release --no-build
           dotnet run --project tests/Consumers/Aether.AI.PrecompiledCode.Consumer -c Release --no-build
           dotnet run --project tests/Consumers/Aether.AI.CSharpCompilation.Consumer -c Release --no-build
+          # 同一宿主里跑全部大脑：program / rulesEngine / nRules / Code / LLM（脚本化，无 key）
+          dotnet run --project tests/Consumers/Aether.AI.BrainMatrix.Consumer -c Release --no-build
         working-directory: aether-ai
