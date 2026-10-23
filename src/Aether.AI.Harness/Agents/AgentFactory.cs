@@ -179,8 +179,11 @@ public sealed class AgentFactory
 
         if (definition.Engine != EngineKind.Llm)
         {
+            var backend = string.IsNullOrWhiteSpace(definition.BrainBackend)
+                ? string.Empty
+                : $" backend '{definition.BrainBackend}'";
             throw new InvalidOperationException(
-                $"No {definition.Engine} brain implementation is registered for agent '{definition.Id}'. " +
+                $"No {definition.Engine}{backend} brain implementation is registered for agent '{definition.Id}'. " +
                 "Register the corresponding brain package explicitly (AddRuleBrains / AddCSharpCodeBrains).");
         }
 

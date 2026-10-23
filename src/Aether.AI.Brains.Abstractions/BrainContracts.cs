@@ -64,6 +64,13 @@ public interface IBrainFactory
 {
     EngineKind Kind { get; }
 
+    /// <summary>
+    /// 同一 <see cref="EngineKind"/> 下的实现标识（如规则后端 <c>program</c> / <c>nRules</c> / <c>rulesEngine</c>）。
+    /// 宿主只引用一个后端时无需选择；同时注册多个时必须由 <see cref="AgentDefinition.BrainBackend"/>
+    /// 显式指定——否则解析会报错，而不是按注册顺序静默取胜。
+    /// </summary>
+    string BackendId => Kind.ToString();
+
     /// <summary>What this brain can consume/produce; the harness wires providers from this, not from the engine kind.</summary>
     BrainCapabilities Capabilities { get; }
 

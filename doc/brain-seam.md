@@ -54,6 +54,36 @@ Aether.AI 建在 Microsoft Agent Framework 之上，但**不假设大脑是 LLM*
 4. 若需要持久化，`EngineKind` 追加枚举值；已有数值不得重排（`Llm=0`、`Rule=1`、`Code=2` 是序列化契约）。
 5. 测试至少覆盖：工厂解析与能力集、流式、非流式、工具回填后续步、会话淘汰、定义校验。
 
+## 同一引擎下的多实现（规则后端）
+
+规则引擎是可以替换的**后端**，不是新的大脑类别：`Engine` 仍是 `Rule`，执行链路（工具回填、
+审批、事件）不变，变的是「如何求值规则」。
+
+| 包（规划命名） | 后端语义 | 适用 | 当前状态 |
+|---|---|---|---|
+| `Aether.AI.Brains.Rule` | 内置 `RuleProgram`：步骤 + 正则/工具计数 → 工具调用或终答，无状态 | 意图路由、固定流程、移动端/禁动态编译宿主 | **已实现**（`BackendId = "program"`） |
+| `Aether.AI.Brains.Rule.RulesEngine` | Microsoft RulesEngine：JSON 规则表 + 表达式求值，无状态 | 非开发者维护的业务规则表、复杂条件矩阵 | 未实现（按需） |
+| `Aether.AI.Brains.Rule.NRules` | NRules：Rete 前向链、事实 + 议程，有状态 | 事实网络推理、冲突消解、长规则集 | 未实现（按需） |
+
+选择机制：
+
+- 每个后端工厂声明唯一 `IBrainFactory.BackendId`（`program` / `nRules` / `rulesEngine`）。
+- 宿主只引用一个后端包时，定义无需任何配置。
+- 宿主引用多个后端时，每个规则 agent 必须设置 `AgentDefinition.BrainBackend`；未设置即解析，
+  会**报错并列出全部候选**，不会按注册顺序静默取胜。
+- `AgentBuilder.BrainBackend("nRules")` 是同一字段的流式写法；路由组合会把该字段复制给内部规则分支。
+
+新增规则后端的步骤：在同一 `EngineKind.Rule` 下实现 `IContentBrainFactory`（`BackendId` 唯一），
+把该引擎的原生规则格式映射为 `IBrain.DecideAsync` 产出的 `AIContent`；宿主侧提供
+`AddXxxRuleBrains()` 并只引用需要的包。
+
+**不要照搬后端的全部能力**：`RuleProgram` 的「首个命中步骤」与 NRules 的议程、RulesEngine 的
+多规则聚合不是同一语义。后端映射只保留与 `IBrain` 契约兼容的子集（每步一个工具调用或一个终答），
+并在文档中写清丢失的语义。两者都涉及运行时表达式/规则编译，在 iOS/AOT 等禁动态编译宿主上需单独验收。
+
+**何时才值得加**：出现真实消费者（需要非开发者维护的规则表，或前向链推理）时再加；
+没有消费者时新增后端只会增加依赖与两套测试，而不会提升现有 `RuleProgram` 的能力。
+
 ## 组合策略（Routing）
 
 `Aether.AI.Brains.Routing` 是**显式组合**，不是第四类大脑：它先做无副作用的入口匹配，命中后把整轮固定

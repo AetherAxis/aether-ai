@@ -21,6 +21,13 @@ public sealed class AgentDefinition
     public EngineKind Engine { get; init; } = EngineKind.Llm;
 
     /// <summary>
+    /// 同一 <see cref="Engine"/> 下的实现变体标识，例如规则后端的 <c>program</c>（内置声明式程序）、
+    /// <c>nRules</c>、<c>rulesEngine</c>。<c>null</c>/空 = 使用该引擎唯一注册的实现；
+    /// 宿主同时注册多个后端时必须显式填写——运行时不会按注册顺序猜。
+    /// </summary>
+    public string? BrainBackend { get; init; }
+
+    /// <summary>
     /// 声明式规则程序。固定 Rule 大脑直接执行；显式 Routing 用它做无副作用匹配并在命中后执行。
     /// 适配器可从 YAML 规整成该对象，全程不经 JSON 中转。
     /// </summary>

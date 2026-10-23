@@ -14,6 +14,7 @@ public sealed class AgentBuilder
     private string _instructions = string.Empty;
     private string _modelId = string.Empty;
     private EngineKind _engine = EngineKind.Llm;
+    private string? _brainBackend;
     private RuleProgram? _rules;
     private CodeBrainLanguage _codeLanguage = CodeBrainLanguage.CSharp;
     private bool _enableBrainRouting;
@@ -45,6 +46,8 @@ public sealed class AgentBuilder
 
     // —— 引擎（大脑；默认 LLM）——
     public AgentBuilder Engine(EngineKind engine) { _engine = engine; return this; }
+    /// <summary>同一引擎下选择实现变体（如规则后端 program/nRules/rulesEngine）；只在注册了多个后端时需要。</summary>
+    public AgentBuilder BrainBackend(string backend) { _brainBackend = backend; return this; }
     public AgentBuilder Rules(RuleProgram rules) { _rules = rules; return this; }
     public AgentBuilder CodeLanguage(CodeBrainLanguage language) { _codeLanguage = language; return this; }
     public AgentBuilder EnableBrainRouting(bool enabled = true) { _enableBrainRouting = enabled; return this; }
@@ -86,6 +89,7 @@ public sealed class AgentBuilder
         Instructions = _instructions,
         ModelId = _modelId,
         Engine = _engine,
+        BrainBackend = _brainBackend,
         Rules = _rules,
         CodeLanguage = _codeLanguage,
         EnableBrainRouting = _enableBrainRouting,

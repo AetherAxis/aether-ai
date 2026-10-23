@@ -14,6 +14,10 @@ public sealed class RuleBrainFactory : IContentBrainFactory
     public RuleBrainFactory(ILoggerFactory? loggerFactory = null) => _loggerFactory = loggerFactory;
 
     public EngineKind Kind => EngineKind.Rule;
+
+    /// <summary>内置声明式 RuleProgram 后端；其他规则引擎后端使用各自的标识（nRules / rulesEngine…）。</summary>
+    public string BackendId => "program";
+
     public BrainCapabilities Capabilities => BrainCapabilities.Tools;
 
     public bool CanCreate(AgentDefinition definition) => definition.Engine == EngineKind.Rule;

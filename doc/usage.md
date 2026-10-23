@@ -59,6 +59,26 @@ await runtime.RunStreamingAsync(session.SessionId, "查600000", new StreamHandle
 
 `AddAetherAI()` 只注册通用设施。缺少所选大脑实现时，在真正创建该 Agent 时给出明确错误，不会在 DI 组合阶段解析模型。
 
+## 规则后端
+
+`Engine(EngineKind.Rule)` 的求值后端可替换：内置后端 `program` 求值 `RuleProgram`；同一 Kind 下可以再注册其他后端（规划中：`nRules` / `rulesEngine`）。
+
+- 宿主只引用一个后端包：无需任何配置。
+- 引用多个后端：每个规则 agent 必须显式选择，否则解析报错并列出全部候选——不会按注册顺序静默取胜。
+
+```csharp
+services.AddRuleBrains();          // 内置 program 后端
+// services.AddNRulesRuleBrains(); // 规划中：另一后端
+
+aether.AddAgent("rule", agent => agent
+    .Engine(EngineKind.Rule)
+    .BrainBackend("nRules")        // 注册多个后端时必须
+    .Rules(ruleProgram)
+    .WithTool("Echo"));
+```
+
+后端选择会传播到路由组合内部的规则分支。是否值得引入某个后端、以及它与 `RuleProgram` 的语义差异，见 [`brain-seam.md`](brain-seam.md#同一引擎下的多实现规则后端)。
+
 ## LLM
 
 ```csharp
