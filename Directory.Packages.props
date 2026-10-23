@@ -1,17 +1,19 @@
 <Project>
 
-  <!-- aether-ai 独立 CPM。版本基线 = monorepo Directory.Packages.props @ 8686503（2026-10-23 迁入，
-       不借迁移自动升级）。
+  <!-- aether-ai 独立 CPM。版本基线 = monorepo Directory.Packages.props @ 8686503（2026-10-23 迁入）；
+       2026-10-24 起改为「独立仓自主升级」，不再跟随 monorepo 冻结副本。
 
-       MAF（Microsoft Agent Framework）1.24.0 稳定线；Mcp 仍 alpha（隔离在 Aether.AI.Mcp 单项目，
+       MAF（Microsoft Agent Framework）1.26.0 稳定线；Mcp 仍 alpha（隔离在 Aether.AI.Mcp 单项目，
        宿主按需 opt-in）。monorepo externals/MAF submodule 只是源码参考（追上游 breaking 用），
        非运行依赖——运行时全走 NuGet，本仓不持 submodule。
 
-       MEAI pin：Abstractions 必须 10.10.1（MAF 1.24 传递链唯一连带——MEAI.OpenAI 10.10.0 在带工具的
-       Responses 调用上 TypeLoadException，10.10.1 为修复版；MEAI 本体仍 10.10.0——两包只有
-       Abstractions 发了 10.10.1）。
+       MAF 1.26 有一处对本仓是 breaking：`AgentSessionStore` 新增抽象成员 `DeleteSessionAsync`
+       ——`MafAgentSessionStore` 已转发到 `IAgentSessionStore.RemoveAsync`，并补了删除钉子测试。
 
-       FCS（FSharp.Compiler.Service）对 FSharp.Core 是精确依赖（=10.1.401）——两处版本必须同步升。 -->
+       MEAI：Abstractions 与本体同为 10.11.0（1.24 时代「Abstractions 必须 10.10.1」的 TypeLoadException
+       补丁随传递链升级消失；10.11.0 下 292 项测试全绿，含带工具的 Responses 路径）。
+
+       FCS（FSharp.Compiler.Service）对 FSharp.Core 是精确依赖（=10.1.402）——两处版本必须同步升。 -->
 
   <PropertyGroup>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
@@ -19,49 +21,49 @@
 
   <ItemGroup>
     <!-- MAF（Microsoft Agent Framework） -->
-    <PackageVersion Include="Microsoft.Agents.AI" Version="1.24.0" />
-    <PackageVersion Include="Microsoft.Agents.AI.Harness" Version="1.24.0" />
-    <PackageVersion Include="Microsoft.Agents.AI.Mcp" Version="1.24.0-alpha.261006.1" />
-    <PackageVersion Include="Microsoft.Agents.AI.OpenAI" Version="1.24.0" />
-    <PackageVersion Include="Microsoft.Agents.AI.Workflows" Version="1.24.0" />
+    <PackageVersion Include="Microsoft.Agents.AI" Version="1.26.0" />
+    <PackageVersion Include="Microsoft.Agents.AI.Harness" Version="1.26.0" />
+    <PackageVersion Include="Microsoft.Agents.AI.Mcp" Version="1.26.0-alpha.261023.1" />
+    <PackageVersion Include="Microsoft.Agents.AI.OpenAI" Version="1.26.0" />
+    <PackageVersion Include="Microsoft.Agents.AI.Workflows" Version="1.26.0" />
 
     <!-- MEAI -->
-    <PackageVersion Include="Microsoft.Extensions.AI" Version="10.10.0" />
-    <PackageVersion Include="Microsoft.Extensions.AI.Abstractions" Version="10.10.1" />
+    <PackageVersion Include="Microsoft.Extensions.AI" Version="10.11.0" />
+    <PackageVersion Include="Microsoft.Extensions.AI.Abstractions" Version="10.11.0" />
 
     <!-- M.E.* 显式声明（不依赖 MAF 传递链） -->
-    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12" />
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.11" />
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.13" />
 
     <!-- F# 契约（Harness.FSharp + Harness.Scripting 的 FCS 编译器） -->
-    <PackageVersion Include="FSharp.Core" Version="10.1.401" />
-    <PackageVersion Include="FSharp.Compiler.Service" Version="43.12.401" />
+    <PackageVersion Include="FSharp.Core" Version="10.1.402" />
+    <PackageVersion Include="FSharp.Compiler.Service" Version="43.12.402" />
     <!-- .NET targeting pack：F# 编译器的系统契约程序集来源（Scripting csproj 以 ExcludeAssets=all
          引用——仅物化进 NuGet 全局缓存供 FsRuleScriptCompiler 运行时定位，零编译/输出影响）。 -->
-    <PackageVersion Include="Microsoft.NETCore.App.Ref" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.NETCore.App.Ref" Version="10.0.13" />
 
     <!-- 代码规则 C# 侧运行时编译 -->
-    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="4.13.0" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="5.9.0" />
 
     <!-- 可选规则后端 Aether.AI.Brains.Rule.RulesEngine（Microsoft RulesEngine，JSON 表达式） -->
     <PackageVersion Include="RulesEngine" Version="6.0.1" />
     <PackageVersion Include="NRules" Version="1.0.4" />
 
     <!-- Memory.Sqlite 吸收件 SqliteStoreBase 的唯一依赖 -->
-    <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.13" />
 
     <!-- OpenTelemetry（Hosting 显式声明） -->
-    <PackageVersion Include="OpenTelemetry" Version="1.12.0" />
-    <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.12.0" />
-    <PackageVersion Include="OpenTelemetry.Exporter.Console" Version="1.12.0" />
-    <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.12.0" />
+    <PackageVersion Include="OpenTelemetry" Version="1.20.1" />
+    <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.20.1" />
+    <PackageVersion Include="OpenTelemetry.Exporter.Console" Version="1.20.1" />
+    <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.20.1" />
 
     <!-- 测试 -->
-    <PackageVersion Include="coverlet.collector" Version="6.0.4" />
-    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageVersion Include="coverlet.collector" Version="10.1.0" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
     <PackageVersion Include="xunit" Version="2.9.3" />
-    <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.4" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.1" />
   </ItemGroup>
 
 </Project>

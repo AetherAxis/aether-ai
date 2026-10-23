@@ -45,6 +45,12 @@ public sealed class MafAgentSessionStore : Microsoft.Agents.AI.AgentSessionStore
         return created;
     }
 
+    /// <summary>删除持久化记录。MAF 1.26 起 <c>AgentSessionStore</c> 把删除提为抽象成员——
+    /// 语义与本仓 <see cref="IAgentSessionStore.RemoveAsync"/> 一致，直接转发。</summary>
+    public override async ValueTask DeleteSessionAsync(
+        AIAgent agent, AgentSessionStoreKey key, CancellationToken cancellationToken = default)
+        => await _inner.RemoveAsync(ToStoreKey(agent, key), cancellationToken).ConfigureAwait(false);
+
     private static string ToStoreKey(AIAgent agent, AgentSessionStoreKey key)
         => AgentSessionKeys.For(agent.Id, key.SessionId, key.Partitions);
 }

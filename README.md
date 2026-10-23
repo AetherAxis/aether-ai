@@ -93,7 +93,7 @@ dotnet build aether-ai.slnx -c Release
 dotnet test aether-ai.slnx -c Release --no-build
 ```
 
-当前架构在 .NET SDK 10.0.301 下完成 Release 验收：38 个项目（20 个 src + 14 个测试程序集 + 4 个示例宿主）编译 0 警告、0 错误（全量重编时 NuGet 审计会对 OTel 1.12.0 的既有 pin 报 NU1902/NU1903，与代码无关），14 个测试程序集共 291 项全部通过。行覆盖率 77.1%（`dotnet test aether-ai.slnx -c Release --collect:"XPlat Code Coverage"`，按 Cobertura 逐行合并）：覆盖统一大脑接缝、非流式路径、多步路由链、定义校验、规则后端选择、`rulesEngine` / `nRules` 适配器、会话持久化、轻量路径配置一致性、MCP 配置读写与失败隔离、长期记忆注入/沉淀闭环，以及各语言的代码大脑注册与退化路径。
+当前架构在 .NET SDK 10.0.301 下完成 Release 验收：38 个项目（20 个 src + 14 个测试程序集 + 4 个示例宿主）编译 0 警告、0 错误（2026-10-24 依赖升级后 NuGet 审计告警已归零：OTel 1.12.0→1.20.1、Microsoft.Data.Sqlite→10.0.13 分别清掉两条已知漏洞），14 个测试程序集共 292 项全部通过。行覆盖率 77.0%（3346/4346，C# 行；`dotnet test aether-ai.slnx -c Release --collect:"XPlat Code Coverage"`，按 Cobertura 逐行合并；该数字是升级后重测的，与升级前 77.1% 的 0.1pp 差别同时受覆盖率工具 6.0.4→10.1.0 换版影响，src 侧本身只净增 6 行）：覆盖统一大脑接缝、非流式路径、多步路由链、定义校验、规则后端选择、`rulesEngine` / `nRules` 适配器、会话持久化、轻量路径配置一致性、MCP 配置读写与失败隔离、长期记忆注入/沉淀闭环，以及各语言的代码大脑注册与退化路径。
 
 测试按被测项目拆分（`tests/<项目名>.Tests`），不再有一个跨全栈的 `Harness.Tests` 巨包：`Aether.AI.Core.Tests` / `Brains.Abstractions.Tests` / `Brains.Rule{,.RulesEngine,.NRules}.Tests` / `Brains.Code{,.Compilation}.Tests` / `Brains.Routing.Tests` / `Brains.Llm.Tests` / `Harness.Tests` / `Hosting.Tests` / `Mcp.Tests` / `Memory.Tests`；跨包属性集中在 `Integration.Tests`（见下）。已知未覆盖的缺口分两类：必须起外部进程/真实端点的（`SkillScriptRunner` 的脚本子进程、MCP 的实连与重连分支），由宿主侧验收兜底；以及刻意保持 `internal`、只经公开接缝间接验证的纯格式化代码（`StreamContentFormat`）。
 

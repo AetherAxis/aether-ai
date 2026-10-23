@@ -129,6 +129,26 @@ public class AgentSessionStoreTests
         Assert.Null(await bridge.GetSessionAsync(agent, key));
     }
 
+    [Fact]
+    public async Task Maf_store_adapter_deletes_through_to_the_inner_store()
+    {
+        var inner = new InMemoryAgentSessionStore();
+        var bridge = new MafAgentSessionStore(inner);
+        var agent = NewFactory().Create(LlmDefinition());
+#pragma warning disable MAAI001 // AgentSessionStoreKey 在 Abstractions 1.24 仍是实验性 API；这里只做互通钉子
+        var key = new AgentSessionStoreKey("to-delete", new Dictionary<string, string>());
+
+        await bridge.GetOrCreateSessionAsync(agent, key);
+        Assert.NotNull(await inner.GetAsync("llm-agent|to-delete"));
+
+        // MAF 1.26 起 DeleteSessionAsync 是基类抽象成员——不转发会让已删会话下次启动「复活」。
+        await bridge.DeleteSessionAsync(agent, key);
+#pragma warning restore MAAI001
+
+        Assert.Null(await inner.GetAsync("llm-agent|to-delete"));
+        Assert.Null(await bridge.GetSessionAsync(agent, key));
+    }
+
     // —— helpers ——
 
     private static HarnessRuntime NewRuntime(IAgentSessionStore? sessionStore)
