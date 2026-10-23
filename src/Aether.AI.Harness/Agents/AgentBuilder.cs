@@ -16,6 +16,8 @@ public sealed class AgentBuilder
     private EngineKind _engine = EngineKind.Llm;
     private RuleProgram? _rules;
     private bool _isCodeRule;
+    private CodeBrainLanguage _codeLanguage = CodeBrainLanguage.CSharp;
+    private bool _enableBrainRouting;
     private double? _temperature;
     private double? _topP;
     private int? _maxOutputTokens;
@@ -46,6 +48,8 @@ public sealed class AgentBuilder
     public AgentBuilder Engine(EngineKind engine) { _engine = engine; return this; }
     public AgentBuilder Rules(RuleProgram rules) { _rules = rules; return this; }
     public AgentBuilder IsCodeRule(bool isCodeRule = true) { _isCodeRule = isCodeRule; return this; }
+    public AgentBuilder CodeLanguage(CodeBrainLanguage language) { _codeLanguage = language; return this; }
+    public AgentBuilder EnableBrainRouting(bool enabled = true) { _enableBrainRouting = enabled; return this; }
 
     // —— 采样 ——
     public AgentBuilder Temperature(double temperature) { _temperature = temperature; return this; }
@@ -86,6 +90,8 @@ public sealed class AgentBuilder
         Engine = _engine,
         Rules = _rules,
         IsCodeRule = _isCodeRule,
+        CodeLanguage = _codeLanguage,
+        EnableBrainRouting = _enableBrainRouting,
         Temperature = _temperature,
         TopP = _topP,
         MaxOutputTokens = _maxOutputTokens,

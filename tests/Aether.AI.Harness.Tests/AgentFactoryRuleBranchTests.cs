@@ -1,3 +1,5 @@
+using Aether.AI.Brains.Abstractions;
+using Aether.AI.Brains.Rule;
 using Aether.AI.Core.Agents;
 using Aether.AI.Harness.Agents;
 using Aether.AI.Harness.Skills;
@@ -39,8 +41,10 @@ public class AgentFactoryRuleBranchTests
         var tools = new ToolRegistry();
         tools.Register("Echo", "回显输入", "测试", _ => AIFunctionFactory.Create((Func<string, string>)Echo));
 
-        // 规则分支不用 IChatClientFactory（不建 LLM 客户端），NullChatClientFactory 仅满足构造。
-        var factory = new AgentFactory(new NullChatClientFactory(), tools, new SkillRegistry());
+        // 规则分支不用 IChatClientFactory（不建 LLM 客户端），只需显式注册 Rule 实现。
+        var brains = new BrainFactoryRegistry();
+        brains.Register(new RuleBrainFactory());
+        var factory = new AgentFactory(new NullChatClientFactory(), tools, new SkillRegistry(), brainFactories: brains);
         var agent = factory.Create(new AgentDefinition
         {
             Id = "rule-af",

@@ -1,6 +1,6 @@
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
-using Aether.AI.Harness.Agents;
+using Aether.AI.Brains.Abstractions;
 
 namespace Aether.AI.Hosting;
 

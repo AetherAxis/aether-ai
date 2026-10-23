@@ -1,17 +1,18 @@
 using System.Collections.Concurrent;
 using System.IO;
 using System.Reflection;
-using System.Runtime.Loader;
-using Aether.AI.Harness.Agents;
+using Aether.AI.Brains.Abstractions;
+using Aether.AI.Brains.Code;
+using Aether.AI.Brains.Code.Compilation;
 using Aether.AI.Harness.FSharp;
 using FSharp.Compiler.CodeAnalysis;
 using FSharp.Compiler.Diagnostics;
 using Microsoft.FSharp.Control;
 
-namespace Aether.AI.Harness.Scripting;
+namespace Aether.AI.Brains.Code.Compilation.FSharp;
 
 /// <summary>
-/// F# 动态编译代码规则源码 → <see cref="IRuleBrain"/> 实例（F# 作者契约的运行时入口）。镜像
+/// F# 动态编译代码规则源码 → <see cref="IBrain"/> 实例（F# 作者契约的运行时入口）。镜像
 /// <see cref="RuleScriptCompiler"/>（C# Roslyn 路径）的整套模式：源码 hash 缓存 + 可卸载 ALC +
 /// <see cref="UnloadStale"/> + 「失败 out error 不抛异常」契约。差异仅在编译器本体：
 /// <list type="bullet">
@@ -20,7 +21,7 @@ namespace Aether.AI.Harness.Scripting;
 /// <item>引用集 = AppDomain 已加载程序集 + <b>显式首个 -r:FSharp.Core</b>（取契约程序集 bin 同目录）——
 /// FCS 不显式传会用其内置的远古默认 FSharp.Core（官方文档明示的坑）。</item>
 /// <item>类型发现两条路：继承 <see cref="FsCodeRuleBrain"/>（线性流程式，复用 C# 协程驱动器，实例即
-/// <see cref="IRuleBrain"/>）；实现 <see cref="IFsRuleBrain"/>（每步决策式）→ 包进
+/// <see cref="IBrain"/>）；实现 <see cref="IFsRuleBrain"/>（每步决策式）→ 包进
 /// <c>FsRuleBrainAdapter&lt;'T&gt;</c>（泛型 + new() 约束 → 平台侧 Activator 无参构造可复建）。</item>
 /// </list>
 /// <para>checker 创建昂贵（加载整套 F# 编译器），进程级单例 + 懒加载。编译跑在后台加载线程
@@ -30,7 +31,7 @@ public static class FsRuleScriptCompiler
 {
     // 源码 hash → 已编译程序集（装在可卸载 ALC 内）。hash 键与 C# 编译器共用同一 SHA256（语义相同），
     // 但缓存各自独立（同一份源码不可能同时是合法 C# 与合法 F#，无冲突）。
-    private static readonly ConcurrentDictionary<string, RuleScriptCompiler.LoadedAssembly> _cache = new();
+    private static readonly ConcurrentDictionary<string, LoadedCompilationAssembly> _cache = new();
 
     // F# 编译器服务实例（进程单例；创建 ~秒级）。FSharpChecker.Create 的 F# optional 参数在 C# 侧
     // 是必填 FSharpOption（14 个）——全传 null = None = 默认配置。
@@ -50,15 +51,15 @@ public static class FsRuleScriptCompiler
     /// packs/，自包含 .app 走 NuGet 缓存兜底）。懒定位；全候选 miss 时 null → TryCompile 返回友好错误。</summary>
     private static readonly Lazy<string?> RefPackDir = new(FindRefPackDir);
 
-    /// <summary>编译 F# 源码并创建 <see cref="IRuleBrain"/> 实例（线性式=FsCodeRuleBrain 子类；
+    /// <summary>编译 F# 源码并创建 <see cref="IBrain"/> 实例（线性式=FsCodeRuleBrain 子类；
     /// 每步式=FsRuleBrainAdapter 包装）。成功 out instance；失败 out error（不抛异常——镜像 C# 编译器契约）。
     /// 命中缓存复用既有程序集（不重编译、不新装 ALC）。</summary>
-    public static bool TryCompile(string source, out IRuleBrain? instance, out string? error)
+    public static bool TryCompile(string source, out IBrain? instance, out string? error)
     {
         instance = null;
         error = null;
 
-        var hash = RuleScriptCompiler.HashOf(source);
+        var hash = CodeCompilationService.SourceKey(Aether.AI.Core.Agents.CodeBrainLanguage.FSharp, source);
         if (_cache.TryGetValue(hash, out var cached))
             return ExtractInstance(cached.Assembly, out instance, out error);
 
@@ -76,12 +77,12 @@ public static class FsRuleScriptCompiler
         {
             if (currentHashes.Contains(kv.Key)) continue;
             if (!_cache.TryRemove(kv.Key, out var removed)) continue;
-            try { removed.Alc.Unload(); }
+            try { removed.LoadContext.Unload(); }
             catch { /* 已在卸载中/竞态，忽略——下一轮会重编译替换 */ }
         }
     }
 
-    private static bool Compile(string source, out RuleScriptCompiler.LoadedAssembly loaded, out string? error)
+    private static bool Compile(string source, out LoadedCompilationAssembly loaded, out string? error)
     {
         loaded = default;
         error = null;
@@ -141,9 +142,9 @@ public static class FsRuleScriptCompiler
             // 读字节 → 可卸载 ALC（与临时文件解耦，加载后即删盘）。
             var bytes = File.ReadAllBytes(dllPath);
             using var ms = new MemoryStream(bytes);
-            var alc = new RuleScriptCompiler.CollectibleAlc();
+            var alc = new CompilationAssemblyLoadContext();
             var asm = alc.LoadFromStream(ms);
-            loaded = new RuleScriptCompiler.LoadedAssembly(asm, alc);
+            loaded = new LoadedCompilationAssembly(asm, alc);
             return true;
         }
         catch (Exception ex)
@@ -323,7 +324,7 @@ public static class FsRuleScriptCompiler
         }
     }
 
-    private static bool ExtractInstance(Assembly asm, out IRuleBrain? instance, out string? error)
+    private static bool ExtractInstance(Assembly asm, out IBrain? instance, out string? error)
     {
         instance = null;
         error = null;
@@ -338,7 +339,7 @@ public static class FsRuleScriptCompiler
             return false;
         }
 
-        // 线性流程式：继承 FsCodeRuleBrain（即 IRuleBrain——C# 协程驱动器驱动）。
+        // 线性流程式：继承 FsCodeRuleBrain（即 IBrain——C# 协程驱动器驱动）。
         var linear = types.FirstOrDefault(t =>
             typeof(FsCodeRuleBrain).IsAssignableFrom(t) && !t.IsAbstract);
         if (linear is not null)
@@ -362,13 +363,13 @@ public static class FsRuleScriptCompiler
         return false;
     }
 
-    private static bool CreateInstance(Type type, out IRuleBrain? instance, out string? error)
+    private static bool CreateInstance(Type type, out IBrain? instance, out string? error)
     {
         instance = null;
         error = null;
         try
         {
-            instance = (IRuleBrain)Activator.CreateInstance(type)!;
+            instance = (IBrain)Activator.CreateInstance(type)!;
             return true;
         }
         catch (Exception ex)

@@ -1,5 +1,6 @@
 using System.Collections;
 using Aether.AI.Core.Agents;
+using Aether.AI.Brains.Rule;
 using Aether.AI.Harness.Agents;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;

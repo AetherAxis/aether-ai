@@ -8,11 +8,12 @@
   <ItemGroup>
     <Compile Include="RuleFs.fs" />
     <Compile Include="FsCodeRuleBrain.fs" />
+    <Compile Include="FSharpCodeBrainServiceCollectionExtensions.fs" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Aether.AI.Core\Aether.AI.Core.csproj" />
-    <ProjectReference Include="..\Aether.AI.Harness\Aether.AI.Harness.csproj" />
+    <ProjectReference Include="..\Aether.AI.Brains.Abstractions\Aether.AI.Brains.Abstractions.csproj" />
+    <ProjectReference Include="..\Aether.AI.Brains.Code\Aether.AI.Brains.Code.csproj" />
   </ItemGroup>
 
   <ItemGroup>

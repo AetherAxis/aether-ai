@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using Aether.AI.Core.Agents;
 using Aether.AI.Core.Messages;
 using Aether.AI.Core.Sessions;
@@ -42,14 +43,17 @@ public sealed class HarnessRuntime
 {
     private readonly AgentRuntimeRegistry _registry;
     private readonly SessionManager _sessions;
+    private readonly SessionConversationMap _sessionConversationMap;
+    private readonly ConditionalWeakTable<FrameworkAgentSession, WorkflowSessionScope> _workflowSessionScopes = new();
     private readonly IRunProgressSink? _progressSink;
 
     public HarnessRuntime(AgentFactory factory, SessionManager sessions,
         SessionConversationMap? sessionConversationMap = null, IRunProgressSink? progressSink = null)
     {
+        _sessionConversationMap = sessionConversationMap ?? new SessionConversationMap();
         _registry = new AgentRuntimeRegistry(
             factory ?? throw new ArgumentNullException(nameof(factory)),
-            sessionConversationMap ?? new SessionConversationMap());
+            _sessionConversationMap);
         _sessions = sessions ?? throw new ArgumentNullException(nameof(sessions));
         _progressSink = progressSink;
     }
@@ -134,6 +138,10 @@ public sealed class HarnessRuntime
         BeginTurn(session, userMessage, isRecoveryTurn: false);
 
         AgentResponse response;
+        var previousAgentId = AgentExecutionContext.CurrentAgentId.Value;
+        var previousConversationId = AgentExecutionContext.CurrentConversationId.Value;
+        AgentExecutionContext.CurrentAgentId.Value = definition.Id;
+        AgentExecutionContext.CurrentConversationId.Value = sessionId.ToString();
         try
         {
             response = await agent.RunAsync(userMessage, frameworkSession, cancellationToken: cancellationToken);
@@ -142,6 +150,11 @@ public sealed class HarnessRuntime
         {
             FailTurn(session, ex);
             throw;
+        }
+        finally
+        {
+            AgentExecutionContext.CurrentAgentId.Value = previousAgentId;
+            AgentExecutionContext.CurrentConversationId.Value = previousConversationId;
         }
 
         var assistantText = response.Text ?? string.Empty;
@@ -229,8 +242,12 @@ public sealed class HarnessRuntime
         try
         {
             // RunDone 由 RunStreamingCoreAsync 在流正常跑完时发射（两重载共用，见该处注释）。
+            var workflowSessionId = _sessionConversationMap.TryGet(frameworkSession, out var conversationId)
+                ? conversationId.ToString()
+                : _workflowSessionScopes.GetValue(
+                    frameworkSession, static _ => new WorkflowSessionScope()).Id;
             return await RunStreamingCoreAsync(agent, frameworkSession, userMessage, handlers, approvalResponse, cancellationToken,
-                onToolCallName: null, _progressSink);
+                onToolCallName: null, _progressSink, conversationId: workflowSessionId);
         }
         catch (Exception ex)
         {
@@ -379,6 +396,11 @@ public sealed class HarnessRuntime
     /// </summary>
     public void RebuildSessionFramework(Guid sessionId)
         => _registry.DropFrameworkSession(sessionId);
+
+    private sealed class WorkflowSessionScope
+    {
+        public string Id { get; } = $"workflow:{Guid.NewGuid():N}";
+    }
 
     private static IEnumerable<string> ExtractToolCalls(AgentResponse response)
     {

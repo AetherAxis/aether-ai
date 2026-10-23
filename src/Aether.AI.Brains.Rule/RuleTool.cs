@@ -1,6 +1,6 @@
 using Microsoft.Extensions.AI;
 
-namespace Aether.AI.Harness.Agents;
+namespace Aether.AI.Brains.Rule;
 
 /// <summary>
 /// 把 <see cref="RuleRegistry"/> 里的规则程序暴露为单个 <c>run_rule</c> <see cref="AIFunction"/>。

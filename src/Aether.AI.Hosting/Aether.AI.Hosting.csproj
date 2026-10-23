@@ -2,14 +2,13 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Aether.AI.Core\Aether.AI.Core.csproj" />
+    <ProjectReference Include="..\Aether.AI.Brains.Abstractions\Aether.AI.Brains.Abstractions.csproj" />
     <ProjectReference Include="..\Aether.AI.Harness\Aether.AI.Harness.csproj" />
     <ProjectReference Include="..\Aether.AI.Memory\Aether.AI.Memory.csproj" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Agents.AI.OpenAI" />
-    <!-- DI/Options 仍靠 Microsoft.Agents.AI.OpenAI 传递（框架 pin 版本）；Logging 改为显式声明（见下），
-         统一全 src 标准，不依赖传递链。 -->
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
     <PackageReference Include="OpenTelemetry" />
     <PackageReference Include="OpenTelemetry.Extensions.Hosting" />

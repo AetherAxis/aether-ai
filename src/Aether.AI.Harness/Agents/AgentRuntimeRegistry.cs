@@ -92,5 +92,8 @@ internal sealed class AgentRuntimeRegistry
     /// 一旦强引用切断，session 即可回收——弱键缓存（SessionConversationMap /
     /// RestoringChatHistoryProvider 的 ConditionalWeakTable）随之随 GC 自动清。</summary>
     internal void DropFrameworkSession(Guid sessionId)
-        => _frameworkSessions.TryRemove(sessionId, out _);
+    {
+        _frameworkSessions.TryRemove(sessionId, out _);
+        _factory.EvictSessionState(sessionId.ToString());
+    }
 }

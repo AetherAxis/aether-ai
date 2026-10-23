@@ -1,17 +1,18 @@
 using System.Collections;
 using System.Globalization;
 using System.Text.RegularExpressions;
+using Aether.AI.Brains.Abstractions;
 using Aether.AI.Core.Agents;
 using Microsoft.Extensions.AI;
 
-namespace Aether.AI.Harness.Agents;
+namespace Aether.AI.Brains.Rule;
 
 /// <summary>
-/// <see cref="IRuleBrain"/> 的声明式实现：求值一个 <see cref="RuleProgram"/>。无状态——每次调用从
-/// <see cref="RuleContext"/> 推导，自上而下取首个命中步骤执行。保证收敛：<see cref="RuleProgram.MaxSteps"/>
+/// <see cref="IBrain"/> 的声明式实现：求值一个 <see cref="RuleProgram"/>。无状态——每次调用从
+/// <see cref="BrainContext"/> 推导，自上而下取首个命中步骤执行。保证收敛：<see cref="RuleProgram.MaxSteps"/>
 /// 到强制终止；无命中流 <see cref="RuleProgram.NoMatchReply"/> 终止。
 /// </summary>
-public sealed class RuleProgramBrain : IRuleBrain
+public sealed class RuleProgramBrain : IBrain
 {
     private readonly RuleProgram _program;
 
@@ -20,10 +21,10 @@ public sealed class RuleProgramBrain : IRuleBrain
         _program = program ?? throw new ArgumentNullException(nameof(program));
     }
 
-    public ValueTask<IReadOnlyList<AIContent>> DecideAsync(RuleContext context, CancellationToken cancellationToken)
+    public ValueTask<IReadOnlyList<AIContent>> DecideAsync(BrainContext context, CancellationToken cancellationToken)
         => new(Decide(context));
 
-    private IReadOnlyList<AIContent> Decide(RuleContext ctx)
+    private IReadOnlyList<AIContent> Decide(BrainContext ctx)
     {
         // 安全闸：本轮工具调用数超限 → 强制终止，防死循环。
         if (ctx.ToolCallsThisTurn >= _program.MaxSteps)
@@ -82,7 +83,7 @@ public sealed class RuleProgramBrain : IRuleBrain
     }
 
     /// <summary>所有非 null 条件同时满足才命中。<paramref name="userMatch"/> 输出 OnUserRegex 的匹配（供模板用）。</summary>
-    private static bool Matches(RuleMatch match, RuleContext ctx, string userText, string resultText, out Match? userMatch)
+    private static bool Matches(RuleMatch match, BrainContext ctx, string userText, string resultText, out Match? userMatch)
     {
         userMatch = null;
 

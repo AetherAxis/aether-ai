@@ -1,44 +1,76 @@
 # Aether.AI
 
-AI 平台层——Microsoft Agent Framework（MAF）之上的本地 agent 运行时：agent 构建 / 流式运行 / 工具注册与审批 / 会话与记忆 / Skills / MCP / 规则 agent（零 LLM）/ 多 agent 工作流 / C#·F# 代码规则运行时编译。
+Microsoft Agent Framework 之上的本地 Agent 运行时。基础大脑只有三类：`Llm`、`Rule`、`Code`；C# / F# 是 Code 的作者语言，Routing 是显式组合策略，源码编译是可选加载能力。
 
-**零业务依赖**：不引用交易、CTP、账本、知识对象任何业务实现；业务工具适配在（规划中的）`aether-ai-integrations`，由宿主选择注册。**零工作区兄弟仓依赖**（层 0 叶子）：全部 ProjectReference 在本仓内，外部依赖均为公共 NuGet。
+## 项目边界
 
-## 组成（十项目）
-
-| 项目 | 说明 |
+| 项目 | 职责 |
 |---|---|
-| `src/Aether.AI.Abstractions` | 零依赖契约叶子：MCP 稳定契约（`IMcpServerRegistry` / `McpServerConfig` / 管理面 DTO）+ `AIFunction` 类型面——business 侧引 AI 的唯一合法出口（不背 Hosting/alpha 依赖） |
-| `src/Aether.AI.Core` | 框架无关域模型：`AgentDefinition`（引擎/记忆/审批/后台 agent 选项）、规则程序（`RuleProgram`）、会话/消息/对话/记忆条目、`StreamHandlers` 流式回调契约、`RunProgress` 信号 |
-| `src/Aether.AI.Harness` | MAF 封装层：`AgentFactory`（定义→agent，规则大脑经 `RuleChatClient` 接缝换脑）、`HarnessRuntime`（流式运行核心 + 会话簿记）、`SessionManager`、`ToolRegistry`（元数据+懒工厂+审批等级+宿主能力过滤）、`SkillRegistry` |
-| `src/Aether.AI.Harness.FSharp` | F# 作者契约（唯一 F# 项目）：`Step` DU / `IFsRuleBrain` / `FsCodeRuleBrain`（线性式，继承 C# `CodeRuleBrain`）——exhaustive matching 是 YAML/C# 给不了的编译期保证 |
-| `src/Aether.AI.Harness.Scripting` | 代码规则运行时编译：Roslyn（`.coderule.cs`）+ FCS（`.coderule.fs`，`FsRuleScriptCompiler`）——SHA256 缓存 + 可卸载 ALC + 失败不抛 |
-| `src/Aether.AI.Hosting` | DI 入口：`AddAetherAI` → `AetherAIBuilder`（AddAgent / AddTool / ConfigureToolRegistry / ConfigureSkillRegistry）+ `AetherAIOptions` + OpenTelemetry + 记忆接线 |
-| `src/Aether.AI.Mcp` | MCP 集成（alpha 包 `Microsoft.Agents.AI.Mcp` 隔离于此，宿主 opt-in）：`McpServerRegistry`（stdio/HTTP server 连接 + 工具预解析）+ `McpManagementService` |
-| `src/Aether.AI.Memory` | 长期记忆抽象（`IMemoryStore` / `IConversationStore` / `MemoryService`）+ InMemory 实现（`AddAetherAI` 默认） |
-| `src/Aether.AI.Memory.Sqlite` | SQLite 双 store（`memory.db` / 会话转录）——含 `SqliteStoreBase` 吸收件（见下） |
-| `src/Aether.AI.Workflows` | 多 agent Handoff 工作流（`WorkflowFactory.BuildAsAIAgent`） |
+| `Aether.AI.Core` | 领域模型；保留旧 `EngineKind` 数值并新增 `Code=2` |
+| `Aether.AI.Abstractions` | MCP 等现有稳定契约 |
+| `Aether.AI.Brains.Abstractions` | `IBrain`、工厂注册表、能力与无副作用匹配契约 |
+| `Aether.AI.Brains.Llm` | OpenAI-compatible 默认模型客户端；显式 opt-in |
+| `Aether.AI.Brains.Rule` | 声明式 `RuleProgram` 求值、注册表与 `run_rule` 工具 |
+| `Aether.AI.Brains.Code` | 语言无关协程驱动、代码大脑注册表、按 run 状态隔离 |
+| `Aether.AI.Brains.Code.CSharp` | 已编译 C# 作者层入口；不携带 Roslyn |
+| `Aether.AI.Brains.Code.FSharp` | F# `Step` / `BrainCtx` / 线性大脑作者契约；不携带 FCS |
+| `Aether.AI.Brains.Code.Compilation` | 编译器插件契约、源码加载与注册协调 |
+| `.Compilation.CSharp` | Roslyn 编译实现；不引用 FCS |
+| `.Compilation.FSharp` | FCS 编译实现与 .NET ref-pack 定位 |
+| `Aether.AI.Brains.Routing` | Rule 优先、未命中时懒解析 LLM 的显式组合 |
+| `Aether.AI.Harness` | 通用 MAF 构建、工具/审批、流式事件、会话和进度；不引用具体大脑实现 |
+| `Aether.AI.Hosting` | `AddAetherAI()` 通用 DI、Memory 与 OTel；不引用 OpenAI/Roslyn/FCS |
+| `Aether.AI.Memory* / Mcp / Workflows` | 原有可选设施 |
 
-测试三项目随迁（`tests/`）：Harness（规则 agent / F# 编译器 / 会话生命周期 / 工具审批 / 技能注册表 / 流式信号）+ Mcp（配置解析）+ Memory（InMemory / Sqlite 双后端）。
+`Aether.AI.Harness.Scripting` 暂保留为兼容组合入口，`AddRuleScripting()` 同时安装 C# 和 F# 编译插件；新宿主应优先选择语言专用项目。
 
-## 设计要点
+## 最小组合
 
-- **MAF 版本纪律**：`Microsoft.Agents.AI` 1.24.0 稳定线；`Microsoft.Extensions.AI.Abstractions` 钉 10.10.1（1.24 传递链唯一连带——MEAI.OpenAI 10.10.0 带工具 Responses 调用 TypeLoadException 的修复版；MEAI 本体仍 10.10.0）。monorepo 的 `externals/MAF` submodule 只是追上游 breaking 的源码参考，**不是运行依赖**——本仓不持 submodule，运行时全走 NuGet。升级前查 MAF 仓库 `dotnet/Directory.Packages.props`。
-- **FCS 精确依赖**：`FSharp.Compiler.Service` 对 `FSharp.Core` 是 `=` 依赖（43.12.401 → 10.1.401），两处版本必须同步升。F# 编译器系统契约程序集来自 `Microsoft.NETCore.App.Ref`（Scripting 以 `ExcludeAssets="all"` 引用——仅物化进 NuGet 全局缓存供运行时定位，零编译输出影响；自包含发布下是 ref-pack 兜底主力）。
-- **规则 agent（零 LLM）**：`Engine == Rule` → `RuleChatClient`（`IChatClient` 接缝）产 `AIContent`，工具执行/回填/循环仍归 MAF HarnessAgent——复用整个 agent 生态（工具/MCP/审批/持久化），只换「决定下一步」的大脑。`RuleChatClient` 仅支持流式（`GetStreamingResponseAsync`）。
-- **工具审批**：`ToolRegistry` 每工具声明 Safe/Confirm/Dangerous；agent 定义 `RequireToolApproval` / `ToolApprovals` 覆盖 → 非 Safe 工具包成 `ApprovalRequiredAIFunction`，运行时流冒 `ToolApprovalRequest` 由宿主 UI 弹框。取消平台登录≠删除工具执行控制（MIGRATION.md P1 红线）。
-- **MAAI001**：MAF 把部分 Harness/Responses API 标 experimental——本仓以稳定类型封装，slnx 范围内抑制该诊断。
-- **`SqliteStoreBase` 吸收件**（2026-10-23 迁入）：原 monorepo `src/Acme.Persistence` 的共享基类（连接串校验 / WAL+busy_timeout PRAGMA / 幂等懒建表），按 Exchange / Client 两仓既有吸收件模式以「仅改 namespace」原样吸收进 `Aether.AI.Memory.Sqlite`——工作区现有第三份（MIGRATION.md §6：不因第三个消费者建 Common 仓）。**上游改动须手动同步三份**。
-- **消费入口**：宿主调 `AddAetherAI()` 拿 builder。**零 LLM 宿主（纯规则/代码规则 agent 的 console/手机形态）无须任何模型配置**——`IChatClient` 懒解析，无 key 也能完成 DI 组合（2026-10-23 修复 + 回归钉子 `AddAetherAICompositionTests`；修复前 `DefaultChatClientFactory` 构造期即解析、无 key 会炸 DI）。真 LLM 宿主设 `AetherAIOptions.OpenAI`（key/endpoint/model）或注册自己的 `IChatClientFactory` 覆盖（多 provider 模型库；只在首个 LLM agent 用到时才调用）。**接入指南见 [doc/usage.md](doc/usage.md)**——三宿主形态（console/桌面/手机）× 三大脑（LLM/规则/代码规则）的标准接法、工具参数名绑定陷阱、iOS 禁子进程约束、验证矩阵。
+```csharp
+services.AddRuleBrains();
+var aether = services.AddAetherAI();
+```
+
+纯 Rule 组合不需要模型 key，也不会通过 Hosting 传递引入 OpenAI 实现。
+
+```csharp
+services.AddCSharpCodeBrains();       // 运行已编译 Code brain，无 Roslyn/FCS
+services.AddCSharpBrainCompilation(); // 仅需要动态 C# 源码时添加
+services.AddAetherAI();
+```
+
+```csharp
+services.AddLlmBrains(o =>
+{
+    o.ApiKey = "...";
+    o.ModelId = "...";
+    o.Endpoint = "..."; // 可选 OpenAI-compatible endpoint
+});
+services.AddAetherAI();
+```
+
+显式 Routing 还需 `AddRuleBrains()`、`AddBrainRouting()`，并在定义上设置 `EnableBrainRouting=true`。Rule 匹配与执行分离；Rule 接管后的异常、拒批、取消和工具失败不会切换 LLM。
+
+## 兼容映射
+
+- `Engine=Llm` -> Llm。
+- `Engine=Rule, IsCodeRule=false` -> Rule。
+- `Engine=Rule, IsCodeRule=true` -> Code。
+- 新定义可直接使用 `Engine=Code`，`CodeLanguage` 默认 `CSharp`。
+- `EngineKind.Llm=0`、`Rule=1` 保持不变；`Code=2`。
+- `Aether.AI.Harness.Agents.IChatClientFactory`、`RuleContext`、`IRuleBrain`、`RuleChatClient` 暂保留源码兼容入口。
+
+## 状态与执行
+
+Code brain 每个逻辑用户 turn 创建 fresh instance。工具调用产出后，以 `CallId` 绑定实例；结果回填原子恢复同一实例。正常终答、异常和取消均不复用该实例，不同 session 不共享协程续体、上下文、中间结果或作者字段。
+
+三类大脑继续复用 Harness 的工具池、调用/回填循环、审批、会话、事件和进度，不复制执行循环。Rule/Code 不自动消费仅对自然语言模型有意义的 Skills、采样和长期记忆提示。
 
 ## 构建与测试
 
 ```bash
-dotnet test aether-ai.slnx    # tests/：152 例（Harness 112 + Mcp 10 + Memory 30）——零真实模型调用
+dotnet build aether-ai.slnx -c Release
+dotnet test aether-ai.slnx -c Release --no-build
 ```
 
-CI（`.github/workflows/ci.yml`）：Release 构建 + 全量测试；零兄弟仓 checkout（层 0 叶子仓）。
-
-## 来历
-
-2026-10-23 拆自 Aether monorepo `src/Aether.AI.*` + `tests/Aether.AI.*.Tests`（源提交 `8686503`，P1 批次；版本基线随迁不升）。迁移时唯一的跨域引用 `Acme.Persistence` 以吸收件方式解除。业务工具适配（ai/Ctp、ai/Trading、ai/Ledger、ai/Agents 等）与桌面消费属后续批次（P2 / P3）。完整决策记录见工作区根 `MIGRATION.md`。
+当前变更环境没有可用 `dotnet`，因此本次只完成了 XML、项目引用路径、引用无环和补丁格式的静态检查；编译与测试结果以具备 .NET 10 SDK 的 CI/开发环境为准。真实模型端点、外部 MCP、GUI 与移动端仍需宿主侧验收。

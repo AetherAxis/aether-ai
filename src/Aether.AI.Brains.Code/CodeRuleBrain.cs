@@ -1,12 +1,13 @@
 using System.Globalization;
 using System.Runtime.CompilerServices;
+using Aether.AI.Brains.Abstractions;
 using Microsoft.Extensions.AI;
 
-namespace Aether.AI.Harness.Agents;
+namespace Aether.AI.Brains.Code;
 
 /// <summary>
-/// 代码规则大脑的抽象基类：作者用一个 async 方法写确定性流程，代替 LLM 与声明式 YAML <see cref="RuleProgramBrain"/>。
-/// 镜像 Trading 策略脚本管线——笔记里写 C# 源码，Roslyn 即时编译成本类子类，注册成工厂（每次召唤 fresh instance，
+/// 代码规则大脑的抽象基类：作者用一个 async 方法写确定性流程，代替 LLM 与声明式规则程序。
+/// 可由预编译类型或源码编译器注册成工厂（每次召唤 fresh instance，
 /// 因代码大脑可有状态）。
 /// <para>
 /// 作者模型为<strong>协程式</strong>：override <see cref="RunAsync"/>，在其中 <c>await Call("工具", new {{ 参数=值 }})</c>
@@ -14,7 +15,7 @@ namespace Aether.AI.Harness.Agents;
 /// 终答（终止 agent 循环）。状态靠作者自有字段在多次 <c>await</c> 间累积（实例在同一轮内复用）。
 /// </para>
 /// <para>
-/// <strong>协程→拉式循环桥接</strong>：MAF 的 agent 循环是拉式的——<see cref="RuleChatClient"/> 每轮调一次
+/// <strong>协程→拉式循环桥接</strong>：MAF 的 agent 循环是拉式的——通用 chat-client 适配器每轮调一次
 /// <see cref="DecideAsync"/> 取本步要流出的 <see cref="AIContent"/>。而作者写的 <see cref="RunAsync"/> 是 push 式协程。
 /// 基类用自定义 awaiter（<see cref="CallAwaiter"/>，<see cref="CallAwaiter.IsCompleted"/> 恒 false）把两者缝合：
 /// 首次调用（<see cref="Step"/>=0）启动 <see cref="RunAsync"/>，它跑到第一个 <c>await Call</c> 挂起（<c>OnCompleted</c>
@@ -22,14 +23,14 @@ namespace Aether.AI.Harness.Agents;
 /// 基类把结果喂回协程并恢复续体——协程继续跑到下一个挂起点或 <c>return</c>。<c>return</c> 的字符串即终答。
 /// </para>
 /// <para>
-/// 对称于 <see cref="RuleProgramBrain"/>：同样实现 <see cref="IRuleBrain"/>，经 <see cref="RuleChatClient"/> 接入
-/// MAF HarnessAgent，工具执行/回填/循环终止全归框架。区别仅在「决定下一步」用 C# 协程而非声明式规则程序。
+/// 与声明式 Rule 大脑一样实现 <see cref="IBrain"/>，经通用适配器接入 MAF HarnessAgent；
+/// 工具执行、回填和循环终止归框架。区别仅在「决定下一步」由作者协程而非声明式规则程序完成。
 /// </para>
 /// </summary>
-public abstract class CodeRuleBrain : IRuleBrain
+public abstract class CodeRuleBrain : IBrain
 {
     /// <summary>当前求值上下文（<see cref="DecideAsync"/> 调用前由基类设置）。保持 protected——原始管线数据。</summary>
-    protected RuleContext Context { get; private set; } = null!;
+    protected BrainContext Context { get; private set; } = null!;
 
     // 以下便利属性刻意 public（原 protected）：F# 不能在 task/lambda 闭包内访问 C# protected 成员
     //（C# 允许，F# 语言限制）——F# 线性大脑（FsCodeRuleBrain）的 task { let! ... } 里要用它们。
@@ -68,7 +69,7 @@ public abstract class CodeRuleBrain : IRuleBrain
 
     /// <inheritdoc/>
     /// <remarks>协程驱动器：把拉式循环（MAF 每轮调一次）映射到 push 式 <see cref="RunAsync"/> 协程。</remarks>
-    public ValueTask<IReadOnlyList<AIContent>> DecideAsync(RuleContext context, CancellationToken cancellationToken)
+    public ValueTask<IReadOnlyList<AIContent>> DecideAsync(BrainContext context, CancellationToken cancellationToken)
     {
         Context = context ?? throw new ArgumentNullException(nameof(context));
 

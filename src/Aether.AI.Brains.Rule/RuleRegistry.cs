@@ -1,12 +1,12 @@
 using System.Diagnostics.CodeAnalysis;
 using Aether.AI.Core.Agents;
 
-namespace Aether.AI.Harness.Agents;
+namespace Aether.AI.Brains.Rule;
 
 /// <summary>
 /// 规则程序注册表：name → <see cref="RuleProgram"/>（+ 描述），供 <see cref="RuleTool"/> 的 <c>run_rule</c>
-/// 工具按名分发。镜像 <c>SkillRegistry</c>/<c>ToolRegistry</c> 的静态注册模式。规则程序可同时以 agent 形态
-/// （<see cref="RuleChatClient"/>）和工具形态（<see cref="RuleToolExecutor"/>）消费——注册一份,两种 facade 共用。
+/// 工具按名分发。镜像 Skill/Tool 注册表的静态注册模式。规则程序可同时以 agent 形态
+/// 和工具形态（<see cref="RuleToolExecutor"/>）消费——注册一份，两种 facade 共用。
 /// </summary>
 public sealed class RuleRegistry
 {

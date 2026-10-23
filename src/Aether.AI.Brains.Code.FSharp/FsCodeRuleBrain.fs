@@ -1,7 +1,7 @@
 namespace Aether.AI.Harness.FSharp
 
 open System.Collections.Generic
-open Aether.AI.Harness.Agents
+open Aether.AI.Brains.Code
 
 /// <summary>
 /// 线性流程式 F# 代码规则大脑：继承 C# <see cref="CodeRuleBrain"/>——协程驱动器（挂起/恢复/工具执行/

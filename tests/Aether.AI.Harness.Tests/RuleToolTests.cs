@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using Aether.AI.Core.Agents;
+using Aether.AI.Brains.Rule;
 using Aether.AI.Harness.Agents;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
@@ -140,6 +141,42 @@ public class RuleToolTests
         var resultObj = await runRule.InvokeAsync(
             new AIFunctionArguments { ["name"] = "nope", ["input"] = "x" });
         Assert.Contains("规则不存在", resultObj?.ToString());
+    }
+
+    [Fact]
+    public async Task RuleTool_propagates_cancellation_and_stops_the_rule_chain()
+    {
+        var program = new RuleProgram
+        {
+            Steps = new()
+            {
+                new RuleStep { Match = new() { MaxToolCalls = 0 }, Action = new() { Tool = "Abort" } },
+                new RuleStep { Match = new() { MinToolCalls = 1 }, Action = new() { Tool = "MustNotRun" } },
+            },
+        };
+        var reg = new RuleRegistry();
+        reg.Register("cancel_rule", program);
+        var laterToolRan = false;
+        var runRule = RuleTool.Create(reg, name => name switch
+        {
+            "Abort" => AIFunctionFactory.Create(
+                (Func<CancellationToken, Task<string>>)(cancellationToken =>
+                    Task.FromCanceled<string>(cancellationToken)), "Abort"),
+            "MustNotRun" => AIFunctionFactory.Create((Func<string>)(() =>
+            {
+                laterToolRan = true;
+                return "unexpected";
+            }), "MustNotRun"),
+            _ => null,
+        });
+
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => runRule.InvokeAsync(
+            new AIFunctionArguments { ["name"] = "cancel_rule", ["input"] = "x" },
+            cancellation.Token).AsTask());
+        Assert.False(laterToolRan);
     }
 
     [Fact]

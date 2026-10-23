@@ -1,5 +1,6 @@
+using Aether.AI.Brains.Code;
+using Aether.AI.Brains.Code.Compilation.CSharp;
 using Aether.AI.Harness.Agents;
-using Aether.AI.Harness.Scripting;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 
@@ -19,6 +20,7 @@ public class CodeRuleBrainTests
     {
         var source = @"
 using System.Threading.Tasks;
+using Aether.AI.Brains.Code;
 using Aether.AI.Harness.Agents;
 
 public class CompiledEcho : CodeRuleBrain
@@ -39,11 +41,47 @@ public class CompiledEcho : CodeRuleBrain
     }
 
     [Fact]
+    public void RuleScriptCompiler_compiles_legacy_fully_qualified_base_type()
+    {
+        var source = @"
+using System.Threading.Tasks;
+
+public class LegacyEcho : Aether.AI.Harness.Agents.CodeRuleBrain
+{
+    protected override Task<string> RunAsync() => Task.FromResult(""legacy"");
+}";
+
+        var ok = RuleScriptCompiler.TryCompile(source, out var brain, out var error);
+
+        Assert.True(ok, error ?? "(no error)");
+        Assert.NotNull(brain);
+    }
+
+    [Fact]
+    public void RuleScriptCompiler_compiles_legacy_namespace_import()
+    {
+        var source = @"
+using System.Threading.Tasks;
+using Aether.AI.Harness.Agents;
+
+public class LegacyImportedEcho : CodeRuleBrain
+{
+    protected override Task<string> RunAsync() => Task.FromResult(""legacy-import"");
+}";
+
+        var ok = RuleScriptCompiler.TryCompile(source, out var brain, out var error);
+
+        Assert.True(ok, error ?? "(no error)");
+        Assert.NotNull(brain);
+    }
+
+    [Fact]
     public void RuleScriptCompiler_trycompile_error()
     {
         // 缺分号 + 未闭合大括号 → 编译诊断
         var source = @"
 using System.Threading.Tasks;
+using Aether.AI.Brains.Code;
 using Aether.AI.Harness.Agents;
 
 public class Broken : CodeRuleBrain
@@ -79,6 +117,7 @@ public class Broken : CodeRuleBrain
         var source = @"
 using System;
 using System.Threading.Tasks;
+using Aether.AI.Brains.Code;
 using Aether.AI.Harness.Agents;
 
 public class ThrowingCtorBrain : CodeRuleBrain

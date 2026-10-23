@@ -1,3 +1,4 @@
+using Aether.AI.Brains.Code;
 using Aether.AI.Core.Agents;
 using Aether.AI.Harness.Agents;
 using Aether.AI.Harness.Skills;
@@ -24,18 +25,22 @@ public class CodeBrainIsolationTests
             ["A"] = new(TaskCreationOptions.RunContinuationsAsynchronously),
             ["B"] = new(TaskCreationOptions.RunContinuationsAsynchronously),
         };
+        var enteredCount = 0;
+        var bothEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var tools = new ToolRegistry();
         tools.Register("Gate", "可控闸门", "测试",
             _ => AIFunctionFactory.Create((Func<string, Task<string>>)(async key =>
             {
                 var tcs = gates.TryGetValue(key, out var g) ? g : throw new InvalidOperationException($"未知闸门 {key}");
+                if (Interlocked.Increment(ref enteredCount) == 2) bothEntered.TrySetResult();
                 return await tcs.Task;
             }), name: "Gate"));
 
+        var counters = new Counters();
         var registry = new CodeBrainRegistry();
-        registry.Register("code-iso", () => new CountingBrain());
+        registry.Register("code-iso", () => new CountingBrain(counters));
 
-        var factory = new AgentFactory(new NullChatClientFactory(), tools, new SkillRegistry(), codeBrainRegistry: registry);
+        var factory = new AgentFactory(new NullChatClientFactory(), tools, new SkillRegistry(), brainFactories: CreateBrainFactories(registry));
         // 一个 agentId 只建一次 agent——镜像 AgentRuntimeRegistry.GetOrCreateAgent 的缓存语义
         var agent = factory.Create(new AgentDefinition
         {
@@ -55,7 +60,7 @@ public class CodeBrainIsolationTests
         var runA = CollectAsync(agent.RunStreamingAsync("A", sessionA));
         var runB = CollectAsync(agent.RunStreamingAsync("B", sessionB));
 
-        await WaitUntilSuspendedAsync(gates);   // 等两路都真正挂到闸门上（不猜时延）
+        await bothEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
         // 交错放行：先 A 后 B
         gates["A"].SetResult("resA");
@@ -68,25 +73,22 @@ public class CodeBrainIsolationTests
         Assert.Contains("final:B:calls=1:result=resB", finalB);
         Assert.DoesNotContain("resB", finalA);
         Assert.DoesNotContain("resA", finalB);
-        Assert.Equal(2, CountingBrain.Instances);
+        Assert.Equal(2, counters.Instances);
     }
 
     [Fact]
     public async Task Next_turn_gets_fresh_code_brain_instance()
     {
-        var gate = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
         var tools = new ToolRegistry();
         tools.Register("Gate", "可控闸门", "测试",
-            _ => AIFunctionFactory.Create((Func<string, Task<string>>)(async key =>
-            {
-                if (key != "T") throw new InvalidOperationException($"未知闸门 {key}");
-                return await gate.Task;
-            }), name: "Gate"));
+            _ => AIFunctionFactory.Create((Func<string, Task<string>>)(key =>
+                Task.FromResult($"result-{key}")), name: "Gate"));
 
+        var counters = new Counters();
         var registry = new CodeBrainRegistry();
-        registry.Register("code-turn", () => new CountingBrain());
+        registry.Register("code-turn", () => new CountingBrain(counters));
 
-        var factory = new AgentFactory(new NullChatClientFactory(), tools, new SkillRegistry(), codeBrainRegistry: registry);
+        var factory = new AgentFactory(new NullChatClientFactory(), tools, new SkillRegistry(), brainFactories: CreateBrainFactories(registry));
         var agent = factory.Create(new AgentDefinition
         {
             Id = "code-turn",
@@ -99,21 +101,21 @@ public class CodeBrainIsolationTests
         });
 
         var session = await agent.CreateSessionAsync();
-        var instancesBefore = CountingBrain.Instances;
-
-        gate.SetResult("r1");
         var first = await CollectAsync(agent.RunStreamingAsync("T", session));
-        Assert.Contains("calls=1", first);
+        Assert.Contains("final:T:calls=1:result=result-T", first);
 
         // 同会话下一 turn：per-run 语义 → fresh 实例（作者字段重置；驱动状态本就每轮重置）
-        gate = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
-        // 工具工厂闭包持有旧 gate——重建 agent 变体太重；直接换注册表工厂输出同一 CountingBrain 类型，
-        // 第二轮用新 TCS 重新注册工具即可
-        var tools2 = tools;
         var second = await CollectAsync(agent.RunStreamingAsync("T2", session));
 
-        Assert.Contains("calls=1", second);   // fresh 实例：跨 turn 不累积作者字段
-        Assert.Equal(instancesBefore + 2, CountingBrain.Instances);
+        Assert.Contains("final:T2:calls=1:result=result-T2", second);
+        Assert.Equal(2, counters.Instances);
+    }
+
+    private static Aether.AI.Brains.Abstractions.IBrainFactoryRegistry CreateBrainFactories(ICodeBrainRegistry registry)
+    {
+        var factories = new Aether.AI.Brains.Abstractions.BrainFactoryRegistry();
+        factories.Register(new CodeBrainFactory(registry));
+        return factories;
     }
 
     private static async Task<string> CollectAsync(IAsyncEnumerable<Microsoft.Agents.AI.AgentUpdate> updates)
@@ -124,32 +126,19 @@ public class CodeBrainIsolationTests
         return text;
     }
 
-    /// <summary>等两路闸门都被工具 await（无竞态：轮询工具进入计数——用 Gate 工具的调用侧信号）。</summary>
-    private static async Task WaitUntilSuspendedAsync(Dictionary<string, TaskCompletionSource<string>> gates)
+    private sealed class Counters
     {
-        // 简单可靠：轮询到两个 run 的最终 Task 均未完成且两闸门均未被消费（SetResult 前）——
-        // 实际上挂起状态由「runA/runB 未完成」+「我们尚未放行」保证；这里只需让两个 run 都
-        // 进入循环（首个 await 已发生）。用短暂让步 + 计数器确认两实例都已启动协程。
-        var sw = System.Diagnostics.Stopwatch.StartNew();
-        while (CountingBrain.Started < 2 && sw.ElapsedMilliseconds < 5000)
-            await Task.Delay(20);
-        // 再让一步：协程已启动并 await Call（挂起写回 _yieldTool 后才可能被 MAF 调工具）
-        await Task.Delay(100);
-        Assert.True(CountingBrain.Started >= 2, "两个 run 的协程应均已启动");
+        public int Instances;
     }
 
     /// <summary>作者侧有状态大脑：实例计数（证明 fresh）+ 调用计数（证明不共享）+ 织入 user 与结果。</summary>
-    private sealed class CountingBrain : CodeRuleBrain
+    private sealed class CountingBrain(Counters counters) : CodeRuleBrain
     {
-        public static int Instances;
-        public static int Started;
-
         private int _calls;
 
         protected override async Task<string> RunAsync()
         {
-            Interlocked.Increment(ref Instances);
-            Interlocked.Increment(ref Started);
+            Interlocked.Increment(ref counters.Instances);
             var key = UserText;
             _calls++;
             var r = await Call("Gate", new Dictionary<string, object?> { ["key"] = key });

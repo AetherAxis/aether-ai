@@ -15,26 +15,33 @@ public sealed class AgentDefinition
     public string Name { get; init; } = string.Empty;
 
     /// <summary>
-    /// 大脑引擎：默认 <see cref="EngineKind.Llm"/>（LLM 当大脑）。
-    /// <see cref="EngineKind.Rule"/> 时 Harness 走 <c>BuildRuleAgent</c>——规则大脑（<c>RuleChatClient</c>）
-    /// 代替 LLM，确定性驱动工具调用，复用同一套 agent 生态（工具/流式/持久化）。
+    /// 大脑类型：默认 <see cref="EngineKind.Llm"/>；另有声明式 <see cref="EngineKind.Rule"/>
+    /// 与程序式 <see cref="EngineKind.Code"/>。三类均通过 Harness 复用工具、流式与会话设施。
     /// </summary>
     public EngineKind Engine { get; init; } = EngineKind.Llm;
 
     /// <summary>
-    /// 规则程序（<see cref="RuleProgram"/>）。仅 <see cref="Engine"/>==<see cref="EngineKind.Rule"/>
-    /// 且 <see cref="IsCodeRule"/> 为 <c>false</c> 时使用；由适配器 <c>RuleProgramYaml</c> 从 YAML
-    /// 规整成对象后直接传入，Harness 交给 <c>RuleProgramBrain</c>，全程不经 JSON 中转。LLM 引擎忽略此字段。
+    /// 声明式规则程序。固定 Rule 大脑直接执行；显式 Routing 用它做无副作用匹配并在命中后执行。
+    /// 适配器可从 YAML 规整成该对象，全程不经 JSON 中转。
     /// </summary>
     public RuleProgram? Rules { get; init; }
 
     /// <summary>
-    /// 代码规则大脑标记。为 <c>true</c> 时 <see cref="Engine"/> 须为 <see cref="EngineKind.Rule"/>，
-    /// Harness 走代码大脑路径：从 <c>ICodeBrainRegistry</c> 按笔记 Id 取 <see cref="IRuleBrain"/> 工厂
-    /// （<c>CodeRuleBrain</c> 实例，由 Roslyn 即时编译的 C# 笔记注册），代替 <c>RuleProgramBrain</c>。
-    /// <see cref="Rules"/> 在此路径下忽略。<c>false</c>（默认）= YAML 声明式规则。
+    /// 旧配置兼容字段。历史定义中的 <c>Engine=Rule, IsCodeRule=true</c> 按
+    /// <see cref="EngineKind.Code"/> 解释；新定义应直接设置 <see cref="Engine"/>。
     /// </summary>
     public bool IsCodeRule { get; init; }
+
+    /// <summary>
+    /// 代码大脑语言。仅有效大脑类型为 <see cref="EngineKind.Code"/> 时使用；默认 C#，兼容旧代码笔记。
+    /// 该字段不表示是否动态编译，已编译类型与源码编译使用同一语言标识。
+    /// </summary>
+    public CodeBrainLanguage CodeLanguage { get; init; } = CodeBrainLanguage.CSharp;
+
+    /// <summary>
+    /// 显式启用规则优先、LLM 兜底路由。默认关闭，不改变旧 Agent 的固定大脑语义。
+    /// </summary>
+    public bool EnableBrainRouting { get; init; }
 
     /// <summary>The system prompt / instructions that shape agent behavior.</summary>
     public string Instructions { get; init; } = string.Empty;

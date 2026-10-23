@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Aether.AI.Core\Aether.AI.Core.csproj" />
+    <ProjectReference Include="..\Aether.AI.Brains.Abstractions\Aether.AI.Brains.Abstractions.csproj" />
   </ItemGroup>
 
   <ItemGroup>

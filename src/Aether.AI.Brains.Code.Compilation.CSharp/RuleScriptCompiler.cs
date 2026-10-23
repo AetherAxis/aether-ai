@@ -4,11 +4,11 @@ using System.Reflection;
 using System.Runtime.Loader;
 using System.Security.Cryptography;
 using System.Text;
-using Aether.AI.Harness.Agents;
+using Aether.AI.Brains.Code;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 
-namespace Aether.AI.Harness.Scripting;
+namespace Aether.AI.Brains.Code.Compilation.CSharp;
 
 /// <summary>
 /// Roslyn 动态编译代码规则源码 → <see cref="CodeRuleBrain"/> 实例。镜像 Trading 的
@@ -19,6 +19,18 @@ namespace Aether.AI.Harness.Scripting;
 /// </summary>
 public static class RuleScriptCompiler
 {
+    private const string LegacyBaseType = "Aether.AI.Harness.Agents.CodeRuleBrain";
+    private const string CurrentBaseType = "Aether.AI.Brains.Code.CodeRuleBrain";
+    private const string LegacyNamespaceImport = "using Aether.AI.Harness.Agents;";
+    private const string CurrentNamespaceImport = "using Aether.AI.Brains.Code;";
+    private const string LegacyShimSource = """
+        namespace Aether.AI.Harness.Agents
+        {
+            [System.Obsolete("Use Aether.AI.Brains.Code.CodeRuleBrain.")]
+            public abstract class CodeRuleBrain : Aether.AI.Brains.Code.CodeRuleBrain { }
+        }
+        """;
+
     // 源码 hash → 已编译程序集（装在可卸载 ALC 内）。
     private static readonly ConcurrentDictionary<string, LoadedAssembly> _cache = new();
 
@@ -53,7 +65,7 @@ public static class RuleScriptCompiler
     }
 
     /// <summary>源码 SHA256 hash（缓存键）。供脚本服务算本轮 currentHashes 集合调 <see cref="UnloadStale"/>。</summary>
-    internal static string HashOf(string source)
+    public static string HashOf(string source)
         => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(source)));
 
     private static bool Compile(string source, out LoadedAssembly loaded, out string? error)
@@ -68,9 +80,18 @@ public static class RuleScriptCompiler
             .Distinct()
             .ToArray();
 
+        var normalizedSource = source.Replace(LegacyBaseType, CurrentBaseType, StringComparison.Ordinal);
+        var syntaxTrees = new List<SyntaxTree> { CSharpSyntaxTree.ParseText(normalizedSource) };
+        if (source.Contains(LegacyNamespaceImport, StringComparison.Ordinal)
+            && !source.Contains(CurrentNamespaceImport, StringComparison.Ordinal)
+            && !source.Contains(LegacyBaseType, StringComparison.Ordinal))
+        {
+            syntaxTrees.Add(CSharpSyntaxTree.ParseText(LegacyShimSource));
+        }
+
         var compilation = CSharpCompilation.Create(
             "CodeRuleScript_" + System.Guid.NewGuid().ToString("N"),
-            new[] { CSharpSyntaxTree.ParseText(source) },
+            syntaxTrees,
             references,
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
 

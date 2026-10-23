@@ -6,7 +6,7 @@ open System.Text.RegularExpressions
 open System.Threading
 open System.Threading.Tasks
 open Microsoft.Extensions.AI
-open Aether.AI.Harness.Agents
+open Aether.AI.Brains.Abstractions
 
 /// <summary>
 /// F# 代码规则大脑的每步动作（作者契约核心）：
@@ -21,7 +21,7 @@ type Step =
     | Reply of text: string
     | Call of tool: string * args: (string * obj) list
 
-/// <summary>每步求值上下文（<see cref="RuleContext"/> 的 F# 视图，由适配器构造）。</summary>
+/// <summary>每步求值上下文（<see cref="BrainContext"/> 的 F# 视图，由适配器构造）。</summary>
 type BrainCtx =
     { /// 本轮用户输入文本（无则空串）。
       UserText: string
@@ -55,12 +55,12 @@ module FsBrainPatterns =
         else
             None
 
-/// <summary>契约内部映射（RuleContext↔BrainCtx、Step→AIContent）。公开只读不便（F# internal module），
+/// <summary>契约内部映射（BrainContext↔BrainCtx、Step→AIContent）。公开只读不便（F# internal module），
 /// 供 <see cref="FsRuleBrainAdapter"/> 用。</summary>
 module internal FsBrainRuntime =
 
-    /// RuleContext → BrainCtx（F# 视图）。
-    let ToCtx (context: RuleContext) : BrainCtx =
+    /// BrainContext → BrainCtx（F# 视图）。
+    let ToCtx (context: BrainContext) : BrainCtx =
         let userText =
             match context.LatestUser with
             | null -> ""
@@ -96,7 +96,7 @@ module internal FsBrainRuntime =
         list :> IReadOnlyList<AIContent>
 
 /// <summary>
-/// 每步式大脑 → 平台 <see cref="IRuleBrain"/> 的适配器。泛型 + <c>new()</c> 约束：平台编译器
+/// 每步式大脑 → 平台 <see cref="IBrain"/> 的适配器。泛型 + <c>new()</c> 约束：平台编译器
 /// （<c>FsRuleScriptCompiler</c>）经 <c>MakeGenericType + Activator</c> 以无参构造创建——
 /// 每次召唤 fresh 的 <c>'T</c> 大脑实例（与 C# 代码规则的工厂语义一致）。
 /// </summary>
@@ -104,9 +104,9 @@ type FsRuleBrainAdapter<'T when 'T: (new: unit -> 'T) and 'T :> IFsRuleBrain>() 
 
     let brain = new 'T()
 
-    interface IRuleBrain with
+    interface IBrain with
 
-        member _.DecideAsync(context: RuleContext, cancellationToken: CancellationToken)
+        member _.DecideAsync(context: BrainContext, cancellationToken: CancellationToken)
             : ValueTask<IReadOnlyList<AIContent>> =
             let ctx = FsBrainRuntime.ToCtx context
             let contents = FsBrainRuntime.ToContents (brain.Decide ctx)

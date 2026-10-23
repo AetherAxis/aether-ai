@@ -1,3 +1,4 @@
+using Aether.AI.Brains.Abstractions;
 using Aether.AI.Core.Agents;
 using Aether.AI.Harness;
 using Aether.AI.Harness.Agents;
@@ -13,8 +14,6 @@ using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using OpenAI;
-using OpenAI.Chat;
 
 namespace Aether.AI.Hosting;
 
@@ -36,33 +35,6 @@ public static class AetherAIServiceCollectionExtensions
         // Options
         services.AddSingleton<AetherAIOptions>(sp => sp.GetRequiredService<IOptions<AetherAIOptions>>().Value);
 
-        // Chat client (OpenAI / Azure OpenAI). Built lazily on first resolve so
-        // that a missing API key does not crash DI composition.
-        services.AddSingleton<IChatClient>(sp =>
-        {
-            var options = sp.GetRequiredService<AetherAIOptions>();
-            var apiKey = string.IsNullOrWhiteSpace(options.OpenAI.ApiKey)
-                ? Environment.GetEnvironmentVariable("OPENAI_API_KEY")
-                : options.OpenAI.ApiKey;
-
-            if (string.IsNullOrWhiteSpace(apiKey))
-            {
-                throw new InvalidOperationException(
-                    "No OpenAI API key configured. Set AetherAI:OpenAI:ApiKey or the OPENAI_API_KEY environment variable.");
-            }
-
-            // Wires an OpenAI-compatible chat client. When an Endpoint is set
-            // (e.g. DeepSeek, Azure-compatible, local), it is used; otherwise the
-            // public OpenAI service is used. Azure OpenAI can be substituted by
-            // replacing this with an AzureOpenAIClient in a later phase.
-            OpenAIClient client = string.IsNullOrWhiteSpace(options.OpenAI.Endpoint)
-                ? new OpenAIClient(apiKey)
-                : new OpenAIClient(
-                    new System.ClientModel.ApiKeyCredential(apiKey),
-                    new OpenAIClientOptions { Endpoint = new Uri(options.OpenAI.Endpoint!) });
-            return client.GetChatClient(options.OpenAI.ModelId).AsIChatClient();
-        });
-
         // Tools — ToolRegistry collects metadata (name/description/category) + factory
         // from each adapter's IToolRegistryContributor. Factories are only invoked
         // when resolving tools for an agent, so GetAllMetas() never instantiates
@@ -75,12 +47,14 @@ public static class AetherAIServiceCollectionExtensions
         // Skills — SkillRegistry 收集各适配器通过 ISkillRegistryContributor 注册的提示词级 skill。
         services.AddSingleton<SkillRegistry>(sp => new SkillRegistry(sp));
 
-        // Harness
-        // IChatClientFactory 懒解析（2026-10-23 修复，详见 DefaultChatClientFactory 构造函数注）：
-        // 零 LLM 宿主（纯规则/代码规则 agent——console/手机形态）不触达 IChatClient，无 key 也能完成 DI 组合。
-        services.AddSingleton<IChatClientFactory>(sp => new DefaultChatClientFactory(
-            () => sp.GetRequiredService<IChatClient>(),
-            sp.GetRequiredService<IOptions<AetherAIOptions>>()));
+        // Concrete brain implementations are opt-in. The common registry is populated from
+        // whichever IBrainFactory services the host selected.
+        services.AddSingleton<IBrainFactoryRegistry>(sp =>
+        {
+            var registry = new BrainFactoryRegistry();
+            foreach (var factory in sp.GetServices<IBrainFactory>()) registry.Register(factory);
+            return registry;
+        });
 
         // 长期记忆 userId 解析器（运行时取当前用户）。默认 () => null（全局记忆）；
         // 桌面宿主用 ICurrentUser 覆盖。AgentFactory 经此构造 MemoryContextProvider。
@@ -93,7 +67,7 @@ public static class AetherAIServiceCollectionExtensions
             var store = sp.GetRequiredService<IMemoryStore>();
             var userIdAccessor = sp.GetRequiredService<Func<string?>>();
             var logger = sp.GetService<ILoggerFactory>();
-            var chatClientFactory = sp.GetService<IChatClientFactory>();
+            var chatClientFactory = ResolveChatClientFactory(sp);
             return definition => definition.EnableLongTermMemory
                 ? new MemoryContextProvider(store, userIdAccessor, logger, chatClientFactory)
                 : null;
@@ -108,7 +82,7 @@ public static class AetherAIServiceCollectionExtensions
             var store = sp.GetService<IConversationStore>();
             var map = sp.GetRequiredService<SessionConversationMap>();
             var logger = sp.GetService<ILoggerFactory>();
-            var chatClientFactory = sp.GetService<IChatClientFactory>();
+            var chatClientFactory = ResolveChatClientFactory(sp);
 #pragma warning disable MEAI001 // SummarizingChatReducer 在 MEAI 10.7 仍是实验性 API，此处显式启用摘要记忆模式
             return definition => definition.Memory switch
             {
@@ -116,8 +90,8 @@ public static class AetherAIServiceCollectionExtensions
                 AgentMemoryMode.SlidingWindow => new RestoringChatHistoryProvider(store, map,
                     new SlidingWindowChatReducer(definition.MaxHistory), logger),
                 // 摘要压缩：保留最近 MaxHistory 条，更早的由 LLM 摘要（threshold=MaxHistory → 达 2× 才触发摘要，避免每轮摘要）。
-                // 规则 agent 无真 IChatClient（RuleChatClient 的 GetResponseAsync 会抛），回退 Full。
-                AgentMemoryMode.Summarize when definition.Engine != EngineKind.Rule && chatClientFactory is not null
+                // 非 LLM 大脑不执行摘要模型调用，回退 Full。
+                AgentMemoryMode.Summarize when definition.GetEffectiveEngine() == EngineKind.Llm && chatClientFactory is not null
                     => new RestoringChatHistoryProvider(store, map,
                         new SummarizingChatReducer(chatClientFactory.Create(definition.ModelId),
                             definition.MaxHistory, definition.MaxHistory)
@@ -130,14 +104,15 @@ public static class AetherAIServiceCollectionExtensions
         services.AddSingleton<AgentFactory>(sp =>
         {
             var factory = new AgentFactory(
-                sp.GetRequiredService<IChatClientFactory>(),
+                ResolveChatClientFactory(sp) ?? MissingChatClientFactory.Instance,
                 sp.GetRequiredService<ToolRegistry>(),
                 sp.GetRequiredService<SkillRegistry>(),
                 sp.GetService<ILoggerFactory>(),
                 sp.GetService<Func<AgentDefinition, AIContextProvider?>>(),
                 sp.GetService<Func<AgentDefinition, ChatHistoryProvider?>>(),
                 sp.GetService<Func<AgentDefinition, IReadOnlyList<AIAgent>?>>(),
-                sp.GetService<ICodeBrainRegistry>());
+                sp.GetRequiredService<IBrainFactoryRegistry>(),
+                sp.GetService<IBrainRoutingClientFactory>());
             factory.UseChatClientAgent = sp.GetRequiredService<AetherAIOptions>().UseChatClientAgent;
             factory.FileMemoryRoot = sp.GetRequiredService<AetherAIOptions>().FileMemoryRoot;
             factory.SkillsDirectory = sp.GetRequiredService<AetherAIOptions>().SkillsDirectory;
@@ -183,5 +158,21 @@ public static class AetherAIServiceCollectionExtensions
         services.AddSingleton<Aether.AI.Harness.SelectedLlmHolder>();
 
         return new AetherAIBuilder(services);
+    }
+
+    private static Aether.AI.Brains.Abstractions.IChatClientFactory? ResolveChatClientFactory(
+        IServiceProvider services)
+#pragma warning disable CS0618 // Compatibility bridge for hosts registered against the former Harness service key.
+        => services.GetService<Aether.AI.Brains.Abstractions.IChatClientFactory>()
+            ?? services.GetService<Aether.AI.Harness.Agents.IChatClientFactory>();
+#pragma warning restore CS0618
+
+    private sealed class MissingChatClientFactory : Aether.AI.Brains.Abstractions.IChatClientFactory
+    {
+        public static MissingChatClientFactory Instance { get; } = new();
+
+        public IChatClient Create(string? modelId)
+            => throw new InvalidOperationException(
+                "No LLM brain is registered. Add an LLM implementation before running an Llm agent.");
     }
 }

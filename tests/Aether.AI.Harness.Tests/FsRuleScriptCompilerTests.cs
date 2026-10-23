@@ -1,5 +1,7 @@
+using Aether.AI.Brains.Abstractions;
+using Aether.AI.Brains.Code;
+using Aether.AI.Brains.Code.Compilation.FSharp;
 using Aether.AI.Harness.Agents;
-using Aether.AI.Harness.Scripting;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 
@@ -158,7 +160,7 @@ type ThrowingFs() =
 
     /// <summary>取大脑实例的「编译产物程序集」：每步式实例是 FsRuleBrainAdapter&lt;'T&gt;——泛型类型定义
     /// 在契约程序集，编译产物是其类型实参（用户 F# 类）所在的程序集；线性式实例类型即编译产物。</summary>
-    private static System.Reflection.Assembly CompiledAssemblyOf(Aether.AI.Harness.Agents.IRuleBrain brain)
+    private static System.Reflection.Assembly CompiledAssemblyOf(IBrain brain)
     {
         var t = brain.GetType();
         return t.IsGenericType ? t.GetGenericArguments()[0].Assembly : t.Assembly;

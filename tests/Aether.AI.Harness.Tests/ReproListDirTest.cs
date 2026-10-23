@@ -1,3 +1,5 @@
+using Aether.AI.Brains.Abstractions;
+using Aether.AI.Brains.Rule;
 using Aether.AI.Core.Agents;
 using Aether.AI.Harness.Agents;
 using Aether.AI.Harness.Skills;
@@ -41,7 +43,9 @@ public class ReproListDirTest
         var tools = new ToolRegistry();
         tools.Register("ExploreDirectory", "列目录", "测试", _ => AIFunctionFactory.Create((Func<string, int, string>)ExploreDirectory));
 
-        var factory = new AgentFactory(new NullChatClientFactory(), tools, new SkillRegistry());
+        var brains = new BrainFactoryRegistry();
+        brains.Register(new RuleBrainFactory());
+        var factory = new AgentFactory(new NullChatClientFactory(), tools, new SkillRegistry(), brainFactories: brains);
         var agent = factory.Create(new AgentDefinition
         {
             Id = "rule-list",

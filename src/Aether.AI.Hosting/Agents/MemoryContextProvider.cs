@@ -1,7 +1,7 @@
 using System.Text.Json;
 using Aether.AI.Core.Memory;
 using Aether.AI.Harness;
-using Aether.AI.Harness.Agents;
+using Aether.AI.Brains.Abstractions;
 using Aether.AI.Memory;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;

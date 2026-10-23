@@ -1,3 +1,4 @@
+using Aether.AI.Brains.Abstractions;
 using Aether.AI.Core.Agents;
 using Aether.AI.Harness.Skills;
 using Aether.AI.Harness.Tools;
@@ -30,7 +31,7 @@ namespace Aether.AI.Harness.Agents;
 /// </para>
 /// <para>
 /// The agent's <see cref="AgentDefinition.ModelId"/> is resolved to an
-/// <see cref="IChatClient"/> via <see cref="IChatClientFactory"/>, and its
+/// <see cref="IChatClient"/> via <see cref="Aether.AI.Brains.Abstractions.IChatClientFactory"/>, and its
 /// <see cref="AgentDefinition.Memory"/> policy is enforced by configuring the
 /// framework's chat-history provider at build time. Non-Safe tools are wrapped
 /// (<c>ApprovalRequiredAIFunction</c>) when the definition opts into approval
@@ -46,7 +47,7 @@ namespace Aether.AI.Harness.Agents;
 /// </summary>
 public sealed class AgentFactory
 {
-    private readonly IChatClientFactory _chatClientFactory;
+    private readonly Aether.AI.Brains.Abstractions.IChatClientFactory _chatClientFactory;
     private readonly ToolRegistry _toolRegistry;
     private readonly SkillRegistry _skillRegistry;
     private readonly ILoggerFactory? _loggerFactory;
@@ -55,7 +56,10 @@ public sealed class AgentFactory
     private readonly Func<AgentDefinition, AIContextProvider?>? _memoryContextProviderFactory;
     private readonly Func<AgentDefinition, ChatHistoryProvider?>? _historyProviderFactory;
     private readonly Func<AgentDefinition, IReadOnlyList<AIAgent>?>? _backgroundAgentsFactory;
-    private readonly ICodeBrainRegistry? _codeBrainRegistry;
+    private readonly IBrainFactoryRegistry? _brainFactories;
+    private readonly IBrainRoutingClientFactory? _routingFactory;
+    private readonly List<WeakReference<ISessionStateOwner>> _sessionStateOwners = new();
+    private readonly object _sessionStateGate = new();
 
     /// <summary>
     /// When <c>true</c> (default), builds a <see cref="HarnessAgent"/>. When
@@ -87,11 +91,12 @@ public sealed class AgentFactory
     /// Resolves the <see cref="IChatClient"/> for a given agent model id.
     /// Invoked lazily per agent so the runtime does not eagerly build a client.
     /// </param>
-    public AgentFactory(IChatClientFactory chatClientFactory, ToolRegistry toolRegistry, SkillRegistry skillRegistry, ILoggerFactory? loggerFactory = null,
+    public AgentFactory(Aether.AI.Brains.Abstractions.IChatClientFactory chatClientFactory, ToolRegistry toolRegistry, SkillRegistry skillRegistry, ILoggerFactory? loggerFactory = null,
         Func<AgentDefinition, AIContextProvider?>? memoryContextProviderFactory = null,
         Func<AgentDefinition, ChatHistoryProvider?>? historyProviderFactory = null,
         Func<AgentDefinition, IReadOnlyList<AIAgent>?>? backgroundAgentsFactory = null,
-        ICodeBrainRegistry? codeBrainRegistry = null)
+        IBrainFactoryRegistry? brainFactories = null,
+        IBrainRoutingClientFactory? routingFactory = null)
     {
         _chatClientFactory = chatClientFactory ?? throw new ArgumentNullException(nameof(chatClientFactory));
         _toolRegistry = toolRegistry ?? throw new ArgumentNullException(nameof(toolRegistry));
@@ -103,7 +108,8 @@ public sealed class AgentFactory
         _memoryContextProviderFactory = memoryContextProviderFactory;
         _historyProviderFactory = historyProviderFactory;
         _backgroundAgentsFactory = backgroundAgentsFactory;
-        _codeBrainRegistry = codeBrainRegistry;
+        _brainFactories = brainFactories;
+        _routingFactory = routingFactory;
     }
 
     /// <summary>Builds a cached, runnable agent for the given definition.</summary>
@@ -141,12 +147,23 @@ public sealed class AgentFactory
         // 工具执行/回填/循环仍归 MAF HarnessAgent（与 LLM 路径同源）。规则不消费注入式 NL 上下文
         //（todo/mode/skill/memory-recall），BuildRuleAgent 内关掉这些 provider（1.0 已验证 TodoProvider
         // 会注入第二条 user 消息污染 LatestUser）。
-        if (definition.Engine == EngineKind.Rule)
+        if (definition.EnableBrainRouting)
         {
-            // 规则 agent 复用编辑器勾选的工具（definition.Tools + ask_user），与 LLM agent 一致——
-            // 规则只调程序里点名的工具，但工具池由作者在编辑器显式选定。
-            // 不经审批（规则定义 RequireToolApproval=false；规则是 Safe 确定性流程）。
-            return BuildRuleAgent(definition, tools, historyProvider);
+            if (_routingFactory is null)
+                throw new InvalidOperationException("Brain routing is enabled but no routing implementation is registered.");
+            var routingClient = _routingFactory.Create(definition);
+            TrackSessionStateOwner(routingClient);
+            return BuildBrainAgent(definition, tools, historyProvider, routingClient);
+        }
+
+        if (definition.GetEffectiveEngine() is EngineKind.Rule or EngineKind.Code)
+        {
+            var brain = _brainFactories?.Resolve(definition).Create(definition)
+                ?? throw new InvalidOperationException(
+                    $"No {definition.GetEffectiveEngine()} brain implementation is registered for agent '{definition.Id}'.");
+            TrackSessionStateOwner(brain);
+            return BuildBrainAgent(definition, tools, historyProvider,
+                new BrainChatClient(brain, _loggerFactory?.CreateLogger<BrainChatClient>()));
         }
 
         return UseChatClientAgent
@@ -154,39 +171,50 @@ public sealed class AgentFactory
             : BuildHarnessAgent(definition, tools, historyProvider);
     }
 
+    internal void EvictSessionState(string sessionId)
+    {
+        lock (_sessionStateGate)
+        {
+            for (var i = _sessionStateOwners.Count - 1; i >= 0; i--)
+            {
+                if (!_sessionStateOwners[i].TryGetTarget(out var owner))
+                {
+                    _sessionStateOwners.RemoveAt(i);
+                    continue;
+                }
+                owner.EvictSession(sessionId);
+            }
+        }
+    }
+
+    private void TrackSessionStateOwner(object candidate)
+    {
+        if (candidate is not ISessionStateOwner owner) return;
+        lock (_sessionStateGate)
+        {
+            _sessionStateOwners.RemoveAll(reference => !reference.TryGetTarget(out _));
+            _sessionStateOwners.Add(new WeakReference<ISessionStateOwner>(owner));
+        }
+    }
+
     /// <summary>
-    /// 构建规则大脑 agent：用 <see cref="RuleChatClient"/>（IChatClient）代替 LLM 客户端接入 HarnessAgent。
+    /// 构建非 LLM 大脑 agent：用通用 IChatClient 适配器接入 HarnessAgent。
     /// 规则程序取自 <see cref="AgentDefinition.Rules"/>（已由适配器规整成 <see cref="RuleProgram"/> 对象）；
     /// null 退空程序（NoMatch 兜底）。关掉所有注入式 NL 上下文 provider——规则不消费它们，且 TodoProvider 会污染 LatestUser。
     /// 工具执行、结果回填、循环仍由 MAF 框架负责（与 LLM 路径同源）。
     /// </summary>
-    private AIAgent BuildRuleAgent(AgentDefinition definition, IList<AITool> tools, ChatHistoryProvider? historyProvider)
+    private AIAgent BuildBrainAgent(
+        AgentDefinition definition,
+        IList<AITool> tools,
+        ChatHistoryProvider? historyProvider,
+        IChatClient client)
     {
-        // 代码规则大脑：按笔记 Id 从注册表取工厂得 fresh 实例（Roslyn 即时编译的 CodeRuleBrain）。
-        // 未注册/编译失败 → ErrorReplyBrain 兜底，产一句提示终止循环。
-        // 声明式 YAML 规则：RuleProgramBrain（definition.Rules）。
-        IRuleBrain brain;
-        if (definition.IsCodeRule)
-        {
-            // 未配 registry / 未注册 / 编译失败 → ErrorReplyBrain 兜底，产一句提示终止循环。
-            // 预声明 + 预赋值，避免 TryCreate 短路未调时的「未赋值局部变量」编译错。
-            IRuleBrain? codeBrain = null;
-            string? codeError = null;
-            bool got = _codeBrainRegistry is not null && _codeBrainRegistry.TryCreate(definition.Id, out codeBrain, out codeError);
-            brain = got ? codeBrain! : new ErrorReplyBrain(codeError);
-        }
-        else
-        {
-            var program = definition.Rules ?? new RuleProgram();
-            brain = new RuleProgramBrain(program);
-        }
-        var client = new RuleChatClient(brain, _loggerFactory?.CreateLogger<RuleChatClient>());
 
         var options = new HarnessAgentOptions
         {
             Id = definition.Id,
             Name = definition.Name,
-            Description = $"Aether.AI rule agent '{definition.Id}'.",
+            Description = $"Aether.AI {definition.GetEffectiveEngine()} agent '{definition.Id}'.",
             // 规则不消费注入式 NL 上下文——全关。TodoProvider 默认开，会注入「### Current todo list」
             // user 消息污染 RuleChatClient 的 LatestUser 检测（1.0 实测）。
             DisableWebSearch = true,
@@ -405,7 +433,7 @@ public sealed class AgentFactory
                 {
                     ChatReducer = new SlidingWindowChatReducer(definition.MaxHistory),
                 }),
-            // Summarize 在此 static fallback 里退回滑动窗口——static 路径无 IChatClientFactory，
+            // Summarize 在此 static fallback 里退回滑动窗口——static 路径无 Aether.AI.Brains.Abstractions.IChatClientFactory，
             // 无法构造 SummarizingChatReducer。运行时由 Hosting 的 _historyProviderFactory（持 chatClientFactory）
             // 接真 SummarizingChatReducer；fallback 仅在未配工厂（如测试）时使用。
             AgentMemoryMode.Summarize => new InMemoryChatHistoryProvider(
@@ -439,29 +467,32 @@ public sealed class AgentFactory
                 + "向用户说明已取消并等待进一步指示，或改用其它方式继续；同一问题在一次会话中最多调用 ask_user 一次。";
         }
 
-        if (definition.Temperature is { } temperature)
+        if (definition.GetEffectiveEngine() == EngineKind.Llm)
         {
-            chatOptions.Temperature = (float)temperature;
-        }
-
-        if (definition.TopP is { } topP)
-        {
-            chatOptions.TopP = (float)topP;
-        }
-
-        if (definition.MaxOutputTokens is { } maxTokens)
-        {
-            chatOptions.MaxOutputTokens = maxTokens;
-        }
-
-        if (definition.ResponseFormat != AgentResponseFormat.Default)
-        {
-            chatOptions.ResponseFormat = definition.ResponseFormat switch
+            if (definition.Temperature is { } temperature)
             {
-                AgentResponseFormat.Text => ChatResponseFormat.Text,
-                AgentResponseFormat.Json => ChatResponseFormat.Json,
-                _ => null,
-            };
+                chatOptions.Temperature = (float)temperature;
+            }
+
+            if (definition.TopP is { } topP)
+            {
+                chatOptions.TopP = (float)topP;
+            }
+
+            if (definition.MaxOutputTokens is { } maxTokens)
+            {
+                chatOptions.MaxOutputTokens = maxTokens;
+            }
+
+            if (definition.ResponseFormat != AgentResponseFormat.Default)
+            {
+                chatOptions.ResponseFormat = definition.ResponseFormat switch
+                {
+                    AgentResponseFormat.Text => ChatResponseFormat.Text,
+                    AgentResponseFormat.Json => ChatResponseFormat.Json,
+                    _ => null,
+                };
+            }
         }
 
         return chatOptions;

@@ -1,3 +1,5 @@
+using Aether.AI.Brains.Abstractions;
+using Aether.AI.Brains.Rule;
 using Aether.AI.Core.Agents;
 using Aether.AI.Harness.Agents;
 using Aether.AI.Harness.Skills;
@@ -42,7 +44,9 @@ public class RuleApprovalTest
         tools.Register("DeleteFile", "删除文件", "测试", _ => AIFunctionFactory.Create((Func<string, string>)DeleteFile),
             ToolApprovalLevel.Dangerous);
 
-        var factory = new AgentFactory(new NullChatClientFactory(), tools, new SkillRegistry());
+        var brains = new BrainFactoryRegistry();
+        brains.Register(new RuleBrainFactory());
+        var factory = new AgentFactory(new NullChatClientFactory(), tools, new SkillRegistry(), brainFactories: brains);
         var agent = factory.Create(new AgentDefinition
         {
             Id = "rule-del",
