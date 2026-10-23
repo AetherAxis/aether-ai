@@ -23,6 +23,8 @@
     <ProjectReference Include="..\..\src\Aether.AI.Memory.Sqlite\Aether.AI.Memory.Sqlite.csproj" />
     <ProjectReference Include="..\..\src\Aether.AI.Core\Aether.AI.Core.csproj" />
     <ProjectReference Include="..\..\src\Aether.AI.Hosting\Aether.AI.Hosting.csproj" />
+    <ProjectReference Include="..\..\src\Aether.AI.Brains.Rule\Aether.AI.Brains.Rule.csproj" />
+    <ProjectReference Include="..\..\src\Aether.AI.Brains.Code\Aether.AI.Brains.Code.csproj" />
   </ItemGroup>
 
 </Project>

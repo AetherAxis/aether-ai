@@ -118,7 +118,7 @@ public class CodeBrainIsolationTests
         return factories;
     }
 
-    private static async Task<string> CollectAsync(IAsyncEnumerable<Microsoft.Agents.AI.AgentUpdate> updates)
+    private static async Task<string> CollectAsync(IAsyncEnumerable<Microsoft.Agents.AI.AgentResponseUpdate> updates)
     {
         var text = "";
         await foreach (var u in updates)

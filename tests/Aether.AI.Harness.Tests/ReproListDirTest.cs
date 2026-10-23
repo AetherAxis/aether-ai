@@ -84,7 +84,7 @@ public class ReproListDirTest
         public object? GetService(Type serviceType, object? serviceKey = null) => null;
     }
 
-    private sealed class NullChatClientFactory : IChatClientFactory
+    private sealed class NullChatClientFactory : Aether.AI.Brains.Abstractions.IChatClientFactory
     {
         public IChatClient Create(string? modelId) => new NullChatClient();
     }
