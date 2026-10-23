@@ -17,11 +17,16 @@ namespace Aether.AI.Hosting;
 /// </summary>
 public sealed class DefaultChatClientFactory : IChatClientFactory
 {
-    private readonly IChatClient _defaultClient;
+    private readonly Func<IChatClient> _defaultClient;
     private readonly AetherAIOptions _options;
     private readonly ConcurrentDictionary<string, IChatClient> _clients = new();
 
-    public DefaultChatClientFactory(IChatClient defaultClient, IOptions<AetherAIOptions> options)
+    /// <param name="defaultClient">默认客户端的<b>懒解析</b>委托（宿主 DI 传 <c>() => sp.GetRequiredService&lt;IChatClient&gt;()</c>）。
+    /// 2026-10-23 修复：原构造函数直接注入 <see cref="IChatClient"/> 单例——DI 组合期（解析 HarnessRuntime 等）即触发
+    /// 解析，无 OpenAI key 时纯规则/代码规则 agent 的零 LLM 宿主（console/手机）连启动都过不去。改注入委托后，
+    /// <see cref="IChatClient"/> 只在首个 LLM agent 真正调用 <see cref="Create"/> 时才解析——缺 key 的错误仍会在
+    /// 那一刻以原消息抛出（有 key 的宿主行为零变化）。回归钉子：tests/AddAetherAICompositionTests。</param>
+    public DefaultChatClientFactory(Func<IChatClient> defaultClient, IOptions<AetherAIOptions> options)
     {
         _defaultClient = defaultClient ?? throw new ArgumentNullException(nameof(defaultClient));
         _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
@@ -30,7 +35,7 @@ public sealed class DefaultChatClientFactory : IChatClientFactory
     public IChatClient Create(string? modelId)
     {
         if (string.IsNullOrWhiteSpace(modelId) || modelId == _options.OpenAI.ModelId)
-            return _defaultClient;
+            return _defaultClient();
 
         return _clients.GetOrAdd(modelId, BuildClient);
     }

@@ -76,7 +76,11 @@ public static class AetherAIServiceCollectionExtensions
         services.AddSingleton<SkillRegistry>(sp => new SkillRegistry(sp));
 
         // Harness
-        services.AddSingleton<IChatClientFactory, DefaultChatClientFactory>();
+        // IChatClientFactory 懒解析（2026-10-23 修复，详见 DefaultChatClientFactory 构造函数注）：
+        // 零 LLM 宿主（纯规则/代码规则 agent——console/手机形态）不触达 IChatClient，无 key 也能完成 DI 组合。
+        services.AddSingleton<IChatClientFactory>(sp => new DefaultChatClientFactory(
+            () => sp.GetRequiredService<IChatClient>(),
+            sp.GetRequiredService<IOptions<AetherAIOptions>>()));
 
         // 长期记忆 userId 解析器（运行时取当前用户）。默认 () => null（全局记忆）；
         // 桌面宿主用 ICurrentUser 覆盖。AgentFactory 经此构造 MemoryContextProvider。

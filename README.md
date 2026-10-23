@@ -29,7 +29,7 @@ AI 平台层——Microsoft Agent Framework（MAF）之上的本地 agent 运行
 - **工具审批**：`ToolRegistry` 每工具声明 Safe/Confirm/Dangerous；agent 定义 `RequireToolApproval` / `ToolApprovals` 覆盖 → 非 Safe 工具包成 `ApprovalRequiredAIFunction`，运行时流冒 `ToolApprovalRequest` 由宿主 UI 弹框。取消平台登录≠删除工具执行控制（MIGRATION.md P1 红线）。
 - **MAAI001**：MAF 把部分 Harness/Responses API 标 experimental——本仓以稳定类型封装，slnx 范围内抑制该诊断。
 - **`SqliteStoreBase` 吸收件**（2026-10-23 迁入）：原 monorepo `src/Acme.Persistence` 的共享基类（连接串校验 / WAL+busy_timeout PRAGMA / 幂等懒建表），按 Exchange / Client 两仓既有吸收件模式以「仅改 namespace」原样吸收进 `Aether.AI.Memory.Sqlite`——工作区现有第三份（MIGRATION.md §6：不因第三个消费者建 Common 仓）。**上游改动须手动同步三份**。
-- **消费入口**：宿主调 `AddAetherAI()` 拿 builder（默认 `IChatClientFactory` 构造期即解析 `IChatClient`，无 OpenAI key 会炸——真宿主注册自己的工厂覆盖，桌面即如此；纯规则/零 LLM 形态可注 Null 工厂）。冒烟形态见 MIGRATION.md §16 验证记录。
+- **消费入口**：宿主调 `AddAetherAI()` 拿 builder。**零 LLM 宿主（纯规则/代码规则 agent 的 console/手机形态）无须任何模型配置**——`IChatClient` 懒解析，无 key 也能完成 DI 组合（2026-10-23 修复 + 回归钉子 `AddAetherAICompositionTests`；修复前 `DefaultChatClientFactory` 构造期即解析、无 key 会炸 DI）。真 LLM 宿主设 `AetherAIOptions.OpenAI`（key/endpoint/model）或注册自己的 `IChatClientFactory` 覆盖（多 provider 模型库；只在首个 LLM agent 用到时才调用）。**接入指南见 [doc/usage.md](doc/usage.md)**——三宿主形态（console/桌面/手机）× 三大脑（LLM/规则/代码规则）的标准接法、工具参数名绑定陷阱、iOS 禁子进程约束、验证矩阵。
 
 ## 构建与测试
 
