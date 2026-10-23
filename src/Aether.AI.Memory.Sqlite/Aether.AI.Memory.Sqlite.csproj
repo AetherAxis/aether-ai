@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Aether.AI.Memory\Aether.AI.Memory.csproj" />
+  </ItemGroup>
+
+  <!-- 2026-10-23 迁移吸收件：原引用 monorepo src/Acme.Persistence（SqliteStoreBase）——按 Exchange/Client
+       两仓既有吸收件模式（MIGRATION.md §6：不因第三个消费者建 Common 仓），SqliteStoreBase 以
+       「仅改 namespace」原样吸收进本项目（Aether.AI.Memory.Sqlite）。上游改动须手动同步三份。 -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,27 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Aether.AI.Core\Aether.AI.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Agents.AI" />
+    <PackageReference Include="Microsoft.Agents.AI.Harness" />
+    <PackageReference Include="Microsoft.Extensions.AI" />
+    <PackageReference Include="Microsoft.Extensions.AI.Abstractions" />
+    <!-- ILogger/ILoggerFactory（AgentFactory/ToolRegistry/RuleChatClient 等用）——显式声明，不依赖传递，
+         与 Harness.Scripting 的 10.0.9 基准一致。 -->
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <!-- Microsoft Agent Framework marks some Harness/Responses APIs as
+         experimental (MAAI001). Aether wraps them behind stable types, so
+         suppress the diagnostic solution-wide. -->
+    <NoWarn>MAAI001</NoWarn>
+  </PropertyGroup>
+
+</Project>

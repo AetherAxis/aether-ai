@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Aether.AI.Core\Aether.AI.Core.csproj" />
+    <ProjectReference Include="..\Aether.AI.Harness\Aether.AI.Harness.csproj" />
+    <!-- F# 作者契约（Step DU / IFsRuleBrain / FsCodeRuleBrain / 适配器）——FsRuleScriptCompiler 编译目标接口 -->
+    <ProjectReference Include="..\Aether.AI.Harness.FSharp\Aether.AI.Harness.FSharp.fsproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="FSharp.Compiler.Service" />
+    <!-- targeting pack：仅物化进 NuGet 全局缓存供 FsRuleScriptCompiler 运行时定位（ExcludeAssets=all
+         = 零编译/输出影响）。自包含 .app 内运行时目录指向 bundle → 找不到 SDK packs/，NuGet 缓存兜底。 -->
+    <PackageReference Include="Microsoft.NETCore.App.Ref" ExcludeAssets="all" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+  </ItemGroup>
+
+</Project>

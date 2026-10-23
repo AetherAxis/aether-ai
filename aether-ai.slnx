@@ -1,0 +1,15 @@
+<Solution>
+  <Project Path="src/Aether.AI.Abstractions/Aether.AI.Abstractions.csproj" />
+  <Project Path="src/Aether.AI.Core/Aether.AI.Core.csproj" />
+  <Project Path="src/Aether.AI.Harness/Aether.AI.Harness.csproj" />
+  <Project Path="src/Aether.AI.Harness.FSharp/Aether.AI.Harness.FSharp.fsproj" />
+  <Project Path="src/Aether.AI.Harness.Scripting/Aether.AI.Harness.Scripting.csproj" />
+  <Project Path="src/Aether.AI.Hosting/Aether.AI.Hosting.csproj" />
+  <Project Path="src/Aether.AI.Mcp/Aether.AI.Mcp.csproj" />
+  <Project Path="src/Aether.AI.Memory/Aether.AI.Memory.csproj" />
+  <Project Path="src/Aether.AI.Memory.Sqlite/Aether.AI.Memory.Sqlite.csproj" />
+  <Project Path="src/Aether.AI.Workflows/Aether.AI.Workflows.csproj" />
+  <Project Path="tests/Aether.AI.Harness.Tests/Aether.AI.Harness.Tests.csproj" />
+  <Project Path="tests/Aether.AI.Mcp.Tests/Aether.AI.Mcp.Tests.csproj" />
+  <Project Path="tests/Aether.AI.Memory.Tests/Aether.AI.Memory.Tests.csproj" />
+</Solution>

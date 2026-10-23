@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      # 层 0 叶子仓：零工作区兄弟仓依赖（ProjectReference 全在本仓内；MAF/MEAI/FCS/OTel 均公共 NuGet）
+      # ——无须兄弟仓 checkout（切 PackageReference 后亦无须变更）
+      - uses: actions/checkout@v4
+        with:
+          path: aether-ai
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      # GitHub Packages 私有源凭据（GITHUB_TOKEN 只写进 CI 运行时文件，不入库）。
+      - name: Configure GitHub Packages credentials
+        run: >
+          dotnet nuget update source github
+          --configfile aether-ai/nuget.config
+          --username AetherAxis
+          --password ${{ secrets.GITHUB_TOKEN }}
+          --store-password-in-clear-text
+
+      - name: Build
+        run: dotnet build aether-ai.slnx -c Release
+        working-directory: aether-ai
+
+      # 2026-10-23 随迁测试：Harness（规则 agent/F# 编译器/会话/工具审批/技能注册表）+ Mcp（配置解析）
+      # + Memory（InMemory/Sqlite 双后端）。零真实模型调用——规则 agent 路径全本地闭包。
+      - name: Test
+        run: dotnet test aether-ai.slnx -c Release --no-build
+        working-directory: aether-ai

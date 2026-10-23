@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <NoWarn>$(NoWarn);NU5104;MAAI001</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- AetherAIBuilder / AetherAIOptions（DI 入口 + 配置） -->
+    <ProjectReference Include="..\Aether.AI.Hosting\Aether.AI.Hosting.csproj" />
+    <!-- MCP 稳定契约（McpServerConfig / IMcpServerRegistry / IMcpManagementService 等）——impl 实现这些接口。 -->
+    <ProjectReference Include="..\Aether.AI.Abstractions\Aether.AI.Abstractions.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- MCP 集成仍是 alpha 预发布（隔离在本项目，宿主按需 opt-in，不影响其它项目）。 -->
+    <PackageReference Include="Microsoft.Agents.AI.Mcp" />
+    <!-- ILoggerFactory（McpServerRegistry/McpManagementService 用）——显式声明，不依赖传递。 -->
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+  </ItemGroup>
+
+</Project>

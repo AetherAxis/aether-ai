@@ -1,0 +1,13 @@
+<Project>
+
+  <!-- 根级构建属性（全局）。刻意只放 CPM 一项（沿 monorepo 根同名文件的最小约定迁入）：
+       - TargetFramework/Nullable/ImplicitUsings 各 C# 项目已 100% 自持；Harness.FSharp（唯一 F# 项目）
+       未声明 ImplicitUsings——全局 enable 会翻转其编译行为（F# 隐式 open）；
+       - LangVersion 由 SDK 默认（net10.0 → latest）覆盖，无需重复。
+       包版本唯一权威见 Directory.Packages.props。 -->
+
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+
+</Project>
