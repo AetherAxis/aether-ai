@@ -31,9 +31,35 @@ public sealed class RuleFirstRoutingChatClient : IChatClient, ISessionStateOwner
         _logger = logger;
     }
 
-    public Task<ChatResponse> GetResponseAsync(
+    /// <summary>
+    /// 非流式入口：与流式共用同一套「先匹配、后固定处理器」逻辑，使 <c>HarnessRuntime.RunAsync</c>
+    /// 对启用路由的 agent 同样可用（此前非流式直接抛 <see cref="NotSupportedException"/>）。
+    /// </summary>
+    public async Task<ChatResponse> GetResponseAsync(
         IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default)
-        => throw new NotSupportedException("Routing client supports streaming only.");
+    {
+        var history = messages as IList<ChatMessage> ?? messages.ToList();
+        var context = BrainContextBuilder.Build(history, options);
+        var handler = ResolveHandler(context);
+
+        if (handler == HandlerKind.Rule)
+        {
+            var contents = await _ruleBrain.DecideAsync(context, cancellationToken).ConfigureAwait(false);
+            TrackCalls(contents, HandlerKind.Rule, context.SessionId, cancellationToken);
+            return TextResponse(contents);
+        }
+
+        if (handler == HandlerKind.StateLost)
+            return TextResponse("路由运行状态已失效，请重新发起本轮操作。");
+
+        var llm = _llm.Value;
+        if (llm is null)
+            return TextResponse("没有匹配的规则，且未配置 LLM 大脑。");
+
+        var response = await llm.GetResponseAsync(history, options, cancellationToken).ConfigureAwait(false);
+        TrackCalls(response.Messages.SelectMany(message => message.Contents), HandlerKind.Llm, context.SessionId, cancellationToken);
+        return response;
+    }
 
     public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
         IEnumerable<ChatMessage> messages,
@@ -41,7 +67,7 @@ public sealed class RuleFirstRoutingChatClient : IChatClient, ISessionStateOwner
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var history = messages as IList<ChatMessage> ?? messages.ToList();
-        var context = BuildContext(history, options);
+        var context = BrainContextBuilder.Build(history, options);
         var handler = ResolveHandler(context);
 
         if (handler == HandlerKind.Rule)
@@ -55,14 +81,14 @@ public sealed class RuleFirstRoutingChatClient : IChatClient, ISessionStateOwner
 
         if (handler == HandlerKind.StateLost)
         {
-            yield return Text("路由运行状态已失效，请重新发起本轮操作。");
+            yield return TextUpdate("路由运行状态已失效，请重新发起本轮操作。");
             yield break;
         }
 
         var llm = _llm.Value;
         if (llm is null)
         {
-            yield return Text("没有匹配的规则，且未配置 LLM 大脑。");
+            yield return TextUpdate("没有匹配的规则，且未配置 LLM 大脑。");
             yield break;
         }
 
@@ -80,15 +106,20 @@ public sealed class RuleFirstRoutingChatClient : IChatClient, ISessionStateOwner
         if (resultIds.Count > 0)
         {
             HandlerKind? selected = null;
+            var resumed = false;
             foreach (var callId in resultIds)
             {
+                // 只消费本客户端发出、且尚未回填的调用。历史里可能同时存在更早步骤已消费的结果
+                //（多步规则链每步一个工具调用）——把它们当未知结果会误判 StateLost 并中断整轮。
                 if (!_handlersByCallId.TryRemove(new HandlerKey(context.SessionId, callId), out var mapped))
-                    return HandlerKind.StateLost;
+                    continue;
                 mapped.CancellationRegistration.Dispose();
+                resumed = true;
                 if (selected is null) selected = mapped.Handler;
                 else if (selected != mapped.Handler) return HandlerKind.StateLost;
             }
-            return selected ?? HandlerKind.StateLost;
+            // 有结果但都不是本客户端等待中的调用 → 运行状态已丢失；不猜处理器，避免重复执行副作用。
+            return resumed ? selected ?? HandlerKind.StateLost : HandlerKind.StateLost;
         }
 
         var input = context.LatestUser;
@@ -163,44 +194,17 @@ public sealed class RuleFirstRoutingChatClient : IChatClient, ISessionStateOwner
         return -1;
     }
 
-    private static ChatResponseUpdate Text(string value) => new()
+    private static ChatResponseUpdate TextUpdate(string value) => new()
     {
         Role = ChatRole.Assistant,
         Contents = new List<AIContent> { new TextContent(value) },
     };
 
-    private static BrainContext BuildContext(IList<ChatMessage> history, ChatOptions? options)
-    {
-        ChatMessage? latestUser = null;
-        var lastUserIndex = -1;
-        for (var i = history.Count - 1; i >= 0; i--)
-        {
-            if (history[i].Role == ChatRole.User && !history[i].Contents.Any(c => c is FunctionResultContent))
-            {
-                latestUser = history[i];
-                lastUserIndex = i;
-                break;
-            }
-        }
+    private static ChatResponse TextResponse(IReadOnlyList<AIContent> contents)
+        => new(new ChatMessage(ChatRole.Assistant, contents.ToList()));
 
-        var toolCalls = 0;
-        FunctionResultContent? latestResult = null;
-        for (var i = lastUserIndex + 1; i < history.Count; i++)
-        {
-            toolCalls += history[i].Contents.Count(c => c is FunctionCallContent);
-            latestResult = history[i].Contents.OfType<FunctionResultContent>().LastOrDefault() ?? latestResult;
-        }
-
-        return new BrainContext
-        {
-            SessionId = AgentExecutionContext.CurrentConversationId.Value,
-            LatestUser = latestUser,
-            LatestToolResult = latestResult,
-            ToolCallsThisTurn = toolCalls,
-            AvailableTools = options?.Tools?.OfType<AIFunction>().ToArray() ?? Array.Empty<AIFunction>(),
-            History = history.ToArray(),
-        };
-    }
+    private static ChatResponse TextResponse(string value)
+        => TextResponse(new AIContent[] { new TextContent(value) });
 
     public object? GetService(Type serviceType, object? serviceKey = null) => null;
     public void Dispose() { }

@@ -55,13 +55,34 @@ public interface ISessionStateOwner
     void EvictSession(string sessionId);
 }
 
-/// <summary>Factory for a configured brain implementation.</summary>
+/// <summary>
+/// Factory for one brain implementation. This is the only seam the harness uses to turn a
+/// definition into a MAF transport: it does not know whether the transport is backed by a model,
+/// a rule program, or an author-written program.
+/// </summary>
 public interface IBrainFactory
 {
     EngineKind Kind { get; }
+
+    /// <summary>What this brain can consume/produce; the harness wires providers from this, not from the engine kind.</summary>
     BrainCapabilities Capabilities { get; }
+
     bool CanCreate(AgentDefinition definition);
+
+    /// <summary>Builds the MAF <see cref="IChatClient"/> that drives one agent instance.</summary>
+    IChatClient CreateChatClient(AgentDefinition definition);
+}
+
+/// <summary>
+/// Factory for deterministic brains authored as an <see cref="IBrain"/> (declarative rules, code programs).
+/// The default transport wraps the brain in <see cref="BrainChatClient"/>; a factory only supplies the brain.
+/// </summary>
+public interface IContentBrainFactory : IBrainFactory
+{
     IBrain Create(AgentDefinition definition);
+
+    IChatClient IBrainFactory.CreateChatClient(AgentDefinition definition)
+        => new BrainChatClient(Create(definition));
 }
 
 /// <summary>Registry consumed by the harness; concrete brain projects register factories here.</summary>
@@ -70,6 +91,30 @@ public interface IBrainFactoryRegistry
     void Register(IBrainFactory factory);
     IBrainFactory Resolve(AgentDefinition definition);
     bool TryResolve(AgentDefinition definition, out IBrainFactory? factory);
+
+    /// <summary>
+    /// Capabilities the harness should assume for a definition. Registered factories win; otherwise the
+    /// engine-kind default applies (so a host that supplies only an <c>IChatClientFactory</c> keeps working).
+    /// </summary>
+    BrainCapabilities CapabilitiesFor(AgentDefinition definition)
+        => TryResolve(definition, out var factory) && factory is not null
+            ? factory.Capabilities
+            : BrainCapabilitiesDefaults.For(definition.Engine);
+}
+
+/// <summary>Default capability sets per engine kind (used when no factory is registered).</summary>
+public static class BrainCapabilitiesDefaults
+{
+    /// <summary>Deterministic brains: tool calls only, no natural-language understanding (code brains add <see cref="BrainCapabilities.StatefulRun"/> explicitly).</summary>
+    public const BrainCapabilities Deterministic = BrainCapabilities.Tools;
+
+    /// <summary>Model-backed brains: full MAF natural-language feature surface.</summary>
+    public const BrainCapabilities Llm =
+        BrainCapabilities.Tools | BrainCapabilities.NaturalLanguageContext |
+        BrainCapabilities.Sampling | BrainCapabilities.Skills | BrainCapabilities.StatefulRun;
+
+    public static BrainCapabilities For(EngineKind kind)
+        => kind == EngineKind.Llm ? Llm : Deterministic;
 }
 
 /// <summary>Resolves a model client lazily for an LLM definition.</summary>

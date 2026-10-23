@@ -26,6 +26,8 @@ public static class LlmBrainServiceCollectionExtensions
         services.AddSingleton<IChatClient>(_ => BuildClient(options, options.ModelId));
         services.AddSingleton<IChatClientFactory>(sp =>
             new DefaultChatClientFactory(() => sp.GetRequiredService<IChatClient>(), options));
+        // LLM 与 Rule/Code 同经 IBrainFactory 解析——Harness 不再对 EngineKind 做大脑分支。
+        services.AddLlmBrainFactory();
         return services;
     }
 

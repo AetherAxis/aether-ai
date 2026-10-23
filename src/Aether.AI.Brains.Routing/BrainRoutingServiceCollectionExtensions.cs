@@ -33,7 +33,12 @@ public sealed class RuleFirstRoutingClientFactory : IBrainRoutingClientFactory
     public IChatClient Create(AgentDefinition definition)
     {
         var ruleDefinition = CloneForRule(definition);
-        var ruleBrain = _brains.Resolve(ruleDefinition).Create(ruleDefinition);
+        if (_brains.Resolve(ruleDefinition) is not IContentBrainFactory ruleFactory)
+        {
+            throw new InvalidOperationException(
+                "Rule-first routing requires a registered content brain (call AddRuleBrains()).");
+        }
+        var ruleBrain = ruleFactory.Create(ruleDefinition);
         return new RuleFirstRoutingChatClient(
             ruleDefinition,
             new[] { new RuleProgramMatcher(definition.Id, _options.RulePriority) },

@@ -24,6 +24,7 @@
     <ProjectReference Include="..\..\src\Aether.AI.Brains.Rule\Aether.AI.Brains.Rule.csproj" />
     <ProjectReference Include="..\..\src\Aether.AI.Brains.Code\Aether.AI.Brains.Code.csproj" />
     <ProjectReference Include="..\..\src\Aether.AI.Brains.Routing\Aether.AI.Brains.Routing.csproj" />
+    <ProjectReference Include="..\..\src\Aether.AI.Brains.Llm\Aether.AI.Brains.Llm.csproj" />
     <ProjectReference Include="..\..\src\Aether.AI.Core\Aether.AI.Core.csproj" />
     <ProjectReference Include="..\..\src\Aether.AI.Brains.Code.Compilation.CSharp\Aether.AI.Brains.Code.Compilation.CSharp.csproj" />
     <ProjectReference Include="..\..\src\Aether.AI.Brains.Code.Compilation.FSharp\Aether.AI.Brains.Code.Compilation.FSharp.csproj" />

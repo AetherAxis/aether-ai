@@ -83,6 +83,7 @@ public static class AetherAIServiceCollectionExtensions
             var map = sp.GetRequiredService<SessionConversationMap>();
             var logger = sp.GetService<ILoggerFactory>();
             var chatClientFactory = ResolveChatClientFactory(sp);
+            var brainFactories = sp.GetRequiredService<IBrainFactoryRegistry>();
 #pragma warning disable MEAI001 // SummarizingChatReducer 在 MEAI 10.7 仍是实验性 API，此处显式启用摘要记忆模式
             return definition => definition.Memory switch
             {
@@ -90,8 +91,10 @@ public static class AetherAIServiceCollectionExtensions
                 AgentMemoryMode.SlidingWindow => new RestoringChatHistoryProvider(store, map,
                     new SlidingWindowChatReducer(definition.MaxHistory), logger),
                 // 摘要压缩：保留最近 MaxHistory 条，更早的由 LLM 摘要（threshold=MaxHistory → 达 2× 才触发摘要，避免每轮摘要）。
-                // 非 LLM 大脑不执行摘要模型调用，回退 Full。
-                AgentMemoryMode.Summarize when definition.Engine == EngineKind.Llm && chatClientFactory is not null
+                // 只有具备自然语言上下文能力的大脑才执行摘要模型调用；确定性大脑回退 Full。
+                AgentMemoryMode.Summarize
+                    when brainFactories.CapabilitiesFor(definition).HasFlag(BrainCapabilities.NaturalLanguageContext)
+                         && chatClientFactory is not null
                     => new RestoringChatHistoryProvider(store, map,
                         new SummarizingChatReducer(chatClientFactory.Create(definition.ModelId),
                             definition.MaxHistory, definition.MaxHistory)

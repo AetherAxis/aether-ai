@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Text.Json;
 using Aether.AI.Core.Memory;
+using Aether.AI.Brains.Abstractions;
 using Aether.AI.Brains.Code;
 using Aether.AI.Harness.Agents;
 using Aether.AI.Hosting.Agents;

@@ -20,9 +20,10 @@ namespace Aether.AI.Harness.Agents;
 /// <c>AgentFileSkillsSource</c>, script-capable); without it, agents fall back
 /// to the <see cref="SkillRegistry"/> prompt-only set.
 /// <para>
-/// <see cref="AgentDefinition.Engine"/> == <see cref="EngineKind.Rule"/> swaps
-/// the brain: <see cref="BrainChatClient"/> (deterministic rules, no LLM) drives
-/// the same tool/streaming/approval ecosystem — see <c>BuildRuleAgent</c>.
+/// The brain is resolved through <see cref="IBrainFactoryRegistry"/>: LLM, rule and code brains
+/// all enter through <see cref="IBrainFactory.CreateChatClient"/> and drive the same
+/// tool/streaming/approval ecosystem. <see cref="BrainCapabilities.NaturalLanguageContext"/>
+/// decides whether the natural-language providers and sampling options are wired.
 /// </para>
 /// <para>
 /// Set <see cref="UseChatClientAgent"/> to use the lighter
@@ -47,7 +48,7 @@ namespace Aether.AI.Harness.Agents;
 /// </summary>
 public sealed class AgentFactory
 {
-    private readonly Aether.AI.Brains.Abstractions.IChatClientFactory _chatClientFactory;
+    private readonly Aether.AI.Brains.Abstractions.IChatClientFactory? _chatClientFactory;
     private readonly ToolRegistry _toolRegistry;
     private readonly SkillRegistry _skillRegistry;
     private readonly ILoggerFactory? _loggerFactory;
@@ -88,17 +89,17 @@ public sealed class AgentFactory
     }
 
     /// <param name="chatClientFactory">
-    /// Resolves the <see cref="IChatClient"/> for a given agent model id.
-    /// Invoked lazily per agent so the runtime does not eagerly build a client.
+    /// 兼容路径：宿主只提供模型客户端、未注册 LLM 大脑工厂时使用。可空——纯 Rule/Code 宿主
+    /// 不需要模型工厂。经 <c>AddLlmBrains()</c> 注册后，LLM 与其他大脑一样走统一注册表。
     /// </param>
-    public AgentFactory(Aether.AI.Brains.Abstractions.IChatClientFactory chatClientFactory, ToolRegistry toolRegistry, SkillRegistry skillRegistry, ILoggerFactory? loggerFactory = null,
+    public AgentFactory(Aether.AI.Brains.Abstractions.IChatClientFactory? chatClientFactory, ToolRegistry toolRegistry, SkillRegistry skillRegistry, ILoggerFactory? loggerFactory = null,
         Func<AgentDefinition, AIContextProvider?>? memoryContextProviderFactory = null,
         Func<AgentDefinition, ChatHistoryProvider?>? historyProviderFactory = null,
         Func<AgentDefinition, IReadOnlyList<AIAgent>?>? backgroundAgentsFactory = null,
         IBrainFactoryRegistry? brainFactories = null,
         IBrainRoutingClientFactory? routingFactory = null)
     {
-        _chatClientFactory = chatClientFactory ?? throw new ArgumentNullException(nameof(chatClientFactory));
+        _chatClientFactory = chatClientFactory;
         _toolRegistry = toolRegistry ?? throw new ArgumentNullException(nameof(toolRegistry));
         _skillRegistry = skillRegistry ?? throw new ArgumentNullException(nameof(skillRegistry));
         _loggerFactory = loggerFactory;
@@ -143,32 +144,73 @@ public sealed class AgentFactory
 
         var historyProvider = _historyProviderFactory?.Invoke(definition) ?? BuildHistoryProvider(definition);
 
-        // 规则大脑：确定性规则驱动工具调用，不委托 LLM。接缝是 IChatClient——BrainChatClient 产 AIContent，
-        // 工具执行/回填/循环仍归 MAF HarnessAgent（与 LLM 路径同源）。规则不消费注入式 NL 上下文
-        //（todo/mode/skill/memory-recall），BuildRuleAgent 内关掉这些 provider（1.0 已验证 TodoProvider
-        // 会注入第二条 user 消息污染 LatestUser）。
+        // 大脑选择不再按 EngineKind 硬编码：所有大脑（含 LLM）经 IBrainFactory 注册表解析，
+        // 能力集决定 Harness 怎么接线。未注册任何工厂时退回宿主的 IChatClientFactory（LLM 兼容路径）。
+        var capabilities = _brainFactories?.CapabilitiesFor(definition)
+            ?? BrainCapabilitiesDefaults.For(definition.Engine);
+        AgentDefinitionValidation.ThrowIfInvalid(definition, capabilities);
+        LogDefinitionDiagnostics(definition, capabilities);
+
         if (definition.EnableBrainRouting)
         {
             if (_routingFactory is null)
                 throw new InvalidOperationException("Brain routing is enabled but no routing implementation is registered.");
             var routingClient = _routingFactory.Create(definition);
             TrackSessionStateOwner(routingClient);
+            // 路由 agent 固定走确定性接线：Rule 分支需要「本轮最后一条业务 user 消息」精确，
+            // TodoProvider 等注入式 NL 上下文会插入第二条 user 消息污染 LatestUser。
+            // 代价是混合分支的 LLM 侧不享受 skills/todo/agent-mode（见 doc/brain-seam.md 已知边界）。
             return BuildBrainAgent(definition, tools, historyProvider, routingClient);
         }
 
-        if (definition.Engine is EngineKind.Rule or EngineKind.Code)
+        if (_brainFactories is not null && _brainFactories.TryResolve(definition, out var brainFactory)
+            && brainFactory is not null)
         {
-            var brain = _brainFactories?.Resolve(definition).Create(definition)
-                ?? throw new InvalidOperationException(
-                    $"No {definition.Engine} brain implementation is registered for agent '{definition.Id}'.");
-            TrackSessionStateOwner(brain);
-            return BuildBrainAgent(definition, tools, historyProvider,
-                new BrainChatClient(brain, _loggerFactory?.CreateLogger<BrainChatClient>()));
+            // 接缝是 IChatClient：确定性大脑（规则/代码）由 BrainChatClient 把 IBrain 适配成传输，
+            // 工具执行/回填/循环仍归 MAF HarnessAgent（与 LLM 路径同源）；LLM 工厂直接给模型客户端。
+            var client = brainFactory.CreateChatClient(definition);
+            TrackSessionStateOwner(client);
+            return capabilities.HasFlag(BrainCapabilities.NaturalLanguageContext)
+                ? (UseChatClientAgent
+                    ? BuildChatClientAgent(definition, tools, historyProvider, client)
+                    : BuildHarnessAgent(definition, tools, historyProvider, client, capabilities))
+                : BuildBrainAgent(definition, tools, historyProvider, client);
         }
 
+        if (definition.Engine != EngineKind.Llm)
+        {
+            throw new InvalidOperationException(
+                $"No {definition.Engine} brain implementation is registered for agent '{definition.Id}'. " +
+                "Register the corresponding brain package explicitly (AddRuleBrains / AddCSharpCodeBrains).");
+        }
+
+        if (_chatClientFactory is null)
+        {
+            throw new InvalidOperationException(
+                $"No LLM brain is registered for agent '{definition.Id}'. " +
+                "Call AddLlmBrains() or register an IChatClientFactory.");
+        }
+
+        var fallbackClient = _chatClientFactory.Create(definition.ModelId);
         return UseChatClientAgent
-            ? BuildChatClientAgent(definition, tools, historyProvider)
-            : BuildHarnessAgent(definition, tools, historyProvider);
+            ? BuildChatClientAgent(definition, tools, historyProvider, fallbackClient)
+            : BuildHarnessAgent(definition, tools, historyProvider, fallbackClient, capabilities);
+    }
+
+    /// <summary>
+    /// 记录「配置了但当前大脑不会消费」的告警。构建每 agent 只发生一次（实例被运行时缓存），
+    /// 故不会逐轮刷屏——这正是把静默忽略显式化的成本最低点。
+    /// </summary>
+    private void LogDefinitionDiagnostics(AgentDefinition definition, BrainCapabilities capabilities)
+    {
+        var logger = _loggerFactory?.CreateLogger<AgentFactory>();
+        if (logger is null) return;
+
+        foreach (var issue in AgentDefinitionValidation.Check(definition, capabilities))
+        {
+            if (!issue.IsError)
+                logger.LogWarning("Agent '{AgentId}' definition [{Code}]: {Message}", definition.Id, issue.Code, issue.Message);
+        }
     }
 
     internal void EvictSessionState(string sessionId)
@@ -198,9 +240,8 @@ public sealed class AgentFactory
     }
 
     /// <summary>
-    /// 构建非 LLM 大脑 agent：用通用 IChatClient 适配器接入 HarnessAgent。
-    /// 规则程序取自 <see cref="AgentDefinition.Rules"/>（已由适配器规整成 <see cref="RuleProgram"/> 对象）；
-    /// null 退空程序（NoMatch 兜底）。关掉所有注入式 NL 上下文 provider——规则不消费它们，且 TodoProvider 会污染 LatestUser。
+    /// 构建无自然语言能力的大脑 agent（规则、代码、路由组合）：用通用 IChatClient 适配器接入 HarnessAgent。
+    /// 关掉所有注入式 NL 上下文 provider——它们不消费，且 TodoProvider 会污染 LatestUser。
     /// 工具执行、结果回填、循环仍由 MAF 框架负责（与 LLM 路径同源）。
     /// </summary>
     private AIAgent BuildBrainAgent(
@@ -236,7 +277,12 @@ public sealed class AgentFactory
         return client.AsHarnessAgent(options, _loggerFactory);
     }
 
-    private AIAgent BuildHarnessAgent(AgentDefinition definition, IList<AITool> tools, ChatHistoryProvider? historyProvider)
+    private AIAgent BuildHarnessAgent(
+        AgentDefinition definition,
+        IList<AITool> tools,
+        ChatHistoryProvider? historyProvider,
+        IChatClient client,
+        BrainCapabilities capabilities)
     {
         // 文件记忆仅在配置了可写根目录时才真正启用；否则静默禁用，避免默认相对路径在只读 CWD 下崩溃。
         var fileMemoryEnabled = definition.EnableFileMemory && !string.IsNullOrEmpty(FileMemoryRoot);
@@ -267,7 +313,7 @@ public sealed class AgentFactory
                     Modes = AetherAgentModeCatalog.Modes,
                 }
                 : null,
-            ChatOptions = BuildChatOptions(definition, tools),
+            ChatOptions = BuildChatOptions(definition, tools, capabilities),
             ChatHistoryProvider = historyProvider,
             ToolApprovalAgentOptions = BuildToolApprovalOptions(definition),
             FileMemoryStore = fileMemoryEnabled
@@ -294,8 +340,6 @@ public sealed class AgentFactory
             if (subAgents is { Count: > 0 })
                 AddContextProvider(options, new BackgroundAgentsProvider(subAgents));
         }
-
-        var client = _chatClientFactory.Create(definition.ModelId);
 
         // mode_get/mode_set 工具的禁用已上移到 HarnessAgentOptions.AgentModeProviderOptions
         // （MAF 1.22 原生 DisableModeGetTool/SetTool——见上 options 构造处注释），
@@ -364,10 +408,12 @@ public sealed class AgentFactory
         o.DisableRunSkillScriptApproval = true;
     }
 
-    private AIAgent BuildChatClientAgent(AgentDefinition definition, IList<AITool> tools, ChatHistoryProvider? historyProvider)
+    private AIAgent BuildChatClientAgent(
+        AgentDefinition definition,
+        IList<AITool> tools,
+        ChatHistoryProvider? historyProvider,
+        IChatClient client)
     {
-        var client = _chatClientFactory.Create(definition.ModelId);
-
         // When no custom history provider is needed (Full), use the lightweight
         // ctor which defaults to InMemoryChatHistoryProvider. Otherwise wire the
         // provider through ChatClientAgentOptions.
@@ -386,7 +432,7 @@ public sealed class AgentFactory
         {
             Name = definition.Name,
             Description = $"Aether.AI agent '{definition.Id}'.",
-            ChatOptions = BuildChatOptions(definition, tools),
+            ChatOptions = BuildChatOptions(definition, tools, BrainCapabilitiesDefaults.Llm),
             ChatHistoryProvider = historyProvider,
         };
         return new ChatClientAgent(client, agentOptions, _loggerFactory);
@@ -444,7 +490,8 @@ public sealed class AgentFactory
             _ => null, // Full = framework default
         };
 
-    private static ChatOptions BuildChatOptions(AgentDefinition definition, IList<AITool> tools)
+    private static ChatOptions BuildChatOptions(
+        AgentDefinition definition, IList<AITool> tools, BrainCapabilities capabilities)
     {
         var chatOptions = new ChatOptions
         {
@@ -467,7 +514,8 @@ public sealed class AgentFactory
                 + "向用户说明已取消并等待进一步指示，或改用其它方式继续；同一问题在一次会话中最多调用 ask_user 一次。";
         }
 
-        if (definition.Engine == EngineKind.Llm)
+        // 采样/输出格式只对声明了 Sampling 能力的大脑生效（LLM）；由能力集而非引擎枚举决定。
+        if (capabilities.HasFlag(BrainCapabilities.Sampling))
         {
             if (definition.Temperature is { } temperature)
             {

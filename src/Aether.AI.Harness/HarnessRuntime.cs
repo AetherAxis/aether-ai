@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using Aether.AI.Brains.Abstractions;
 using Aether.AI.Core.Agents;
 using Aether.AI.Core.Messages;
 using Aether.AI.Core.Sessions;
@@ -60,9 +61,13 @@ public sealed class HarnessRuntime
 
     public SessionManager Sessions => _sessions;
 
-    /// <summary>Registers an agent definition so it can be started by id.</summary>
+    /// <summary>
+    /// Registers an agent definition so it can be started by id. Definitions whose engine configuration
+    /// contradicts their brain (e.g. routing on a non-LLM engine) fail here — before any session exists.
+    /// </summary>
     public HarnessRuntime RegisterAgent(AgentDefinition definition)
     {
+        AgentDefinitionValidation.ThrowIfInvalid(definition);
         _registry.Register(definition);
         return this;
     }

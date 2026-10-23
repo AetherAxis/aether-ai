@@ -1,12 +1,13 @@
 using Aether.AI.Brains.Abstractions;
 using Aether.AI.Core.Agents;
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 
 namespace Aether.AI.Brains.Code;
 
-public sealed class CodeBrainFactory : IBrainFactory
+public sealed class CodeBrainFactory : IContentBrainFactory
 {
     private readonly ICodeBrainRegistry _registry;
     private readonly ILoggerFactory? _loggerFactory;
@@ -25,6 +26,9 @@ public sealed class CodeBrainFactory : IBrainFactory
     public IBrain Create(AgentDefinition definition)
         => new RunScopedBrainRouter(() => CreateBrain(definition.Id),
             _loggerFactory?.CreateLogger<RunScopedBrainRouter>());
+
+    public IChatClient CreateChatClient(AgentDefinition definition)
+        => new BrainChatClient(Create(definition), _loggerFactory?.CreateLogger<BrainChatClient>());
 
     private IBrain CreateBrain(string id)
     {

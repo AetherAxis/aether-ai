@@ -1,4 +1,6 @@
+using Aether.AI.Brains.Abstractions;
 using Aether.AI.Brains.Code;
+using Aether.AI.Brains.Llm;
 using Aether.AI.Brains.Rule;
 using Aether.AI.Core.Agents;
 using Aether.AI.Harness;
@@ -38,6 +40,30 @@ public class AddAetherAICompositionTests
 
         Assert.NotNull(agent);
         Assert.Equal(1, chatClientFactory.CreateCalls);
+    }
+
+    [Fact]
+    public void AddLlmBrains_registers_llm_in_the_same_brain_registry()
+    {
+        // 无 key 也应能完成注册与解析：LLM 工厂只持有 IChatClientFactory，模型客户端在真正建 agent 时才解析。
+        var saved = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
+        Environment.SetEnvironmentVariable("OPENAI_API_KEY", null);
+        try
+        {
+            var services = new ServiceCollection();
+            services.AddLlmBrains();
+            services.AddAetherAI();
+
+            using var provider = services.BuildServiceProvider();
+            var registry = provider.GetRequiredService<IBrainFactoryRegistry>();
+
+            Assert.True(registry.TryResolve(new AgentDefinition { Id = "llm", Engine = EngineKind.Llm }, out var factory));
+            Assert.Equal(BrainCapabilitiesDefaults.Llm, factory!.Capabilities);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("OPENAI_API_KEY", saved);
+        }
     }
 
     [Fact]

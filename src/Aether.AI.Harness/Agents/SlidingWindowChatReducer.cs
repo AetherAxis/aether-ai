@@ -1,3 +1,4 @@
+using Aether.AI.Brains.Abstractions;
 using Microsoft.Extensions.AI;
 
 namespace Aether.AI.Harness.Agents;
@@ -60,5 +61,5 @@ public sealed class SlidingWindowChatReducer : IChatReducer
 
     /// <summary>审批响应和工具结果是协议消息，不能作为对话轮次起点。</summary>
     private static bool IsSafeUserStart(ChatMessage message)
-        => ChatMessageClassification.IsBusinessUserMessage(message);
+        => BrainContextBuilder.IsBusinessUserMessage(message);
 }
