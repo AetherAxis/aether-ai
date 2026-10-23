@@ -5,7 +5,7 @@
 | 类型 | 决策方式 | 注册 |
 |---|---|---|
 | Llm | 模型理解上下文，决定回复或工具调用 | `AddLlmBrains(...)` |
-| Rule | `RuleProgram` 声明式条件、捕获和步骤 | `AddRuleBrains()` |
+| Rule | 声明式规则：`RuleProgram`（自研）／RulesEngine／NRules 后端 | `AddRuleBrains()` / `AddRulesEngineRuleBrains()` / `AddNRulesRuleBrains()` |
 | Code | 作者程序决定下一步；C# / F# 为语言实现 | `AddCSharpCodeBrains()` / `AddFSharpCodeBrains()` |
 
 Routing 是显式组合，不是第四类大脑；动态编译也是加载能力，不是大脑类别。
@@ -61,23 +61,82 @@ await runtime.RunStreamingAsync(session.SessionId, "查600000", new StreamHandle
 
 ## 规则后端
 
-`Engine(EngineKind.Rule)` 的求值后端可替换：内置后端 `program` 求值 `RuleProgram`；同一 Kind 下可以再注册其他后端（规划中：`nRules` / `rulesEngine`）。
+`Engine(EngineKind.Rule)` 的求值后端可替换：声明式规则大脑既可以自己实现，也可以直接接入
+现成规则引擎。内置 `program` 求值 `RuleProgram`；`rulesEngine` 求值 Microsoft RulesEngine 的
+workflow JSON；`nRules` 求值 NRules 的 C# 规则类。
+
+| 后端 | 注册 | 规则定义 |
+|---|---|---|
+| `program` | `AddRuleBrains()` | `Rules(new RuleProgram { ... })` |
+| `rulesEngine` | `AddRulesEngineRuleBrains()` | `RuleSource(workflowJson)` |
+| `nRules` | `AddNRulesRuleBrains()` | `RuleSource({"ruleTypes": [...]})` |
 
 - 宿主只引用一个后端包：无需任何配置。
 - 引用多个后端：每个规则 agent 必须显式选择，否则解析报错并列出全部候选——不会按注册顺序静默取胜。
 
 ```csharp
-services.AddRuleBrains();          // 内置 program 后端
-// services.AddNRulesRuleBrains(); // 规划中：另一后端
+services.AddRuleBrains();
+services.AddRulesEngineRuleBrains();
 
 aether.AddAgent("rule", agent => agent
     .Engine(EngineKind.Rule)
-    .BrainBackend("nRules")        // 注册多个后端时必须
-    .Rules(ruleProgram)
+    .BrainBackend("rulesEngine")   // 注册多个后端时必须
+    .RuleSource("""
+      [{
+        "WorkflowName": "agent",
+        "Rules": [
+          {
+            "RuleName": "query",
+            "Expression": "brain.UserText.StartsWith(\"查\") && brain.ToolCallCount == 0",
+            "Properties": { "tool": "Echo", "capture": "查(?<sym>.+)", "args": { "text": "{user.1}" } }
+          },
+          {
+            "RuleName": "reply",
+            "Expression": "brain.ToolCallCount == 1 && brain.LastResult != null",
+            "Properties": { "reply": "结果：{result}" }
+          }
+        ]
+      }]
+      """)
     .WithTool("Echo"));
 ```
 
-后端选择会传播到路由组合内部的规则分支。是否值得引入某个后端、以及它与 `RuleProgram` 的语义差异，见 [`brain-seam.md`](brain-seam.md#同一引擎下的多实现规则后端)。
+RulesEngine 独立求值每条规则，同一步可能命中多条。适配器按声明顺序取「第一条命中且带动作」的
+规则，重叠命中记一次 warning；请用 `brain.ToolCallCount` / `brain.LastResult` 把步骤写成互斥条件，
+否则首条规则会在拿到工具结果后再次命中。动作载荷（`reply` / `tool` + `args` / `capture`）与事实
+字段见 [`brain-seam.md`](brain-seam.md#rulesengine-适配器契约)。
+
+### NRules 后端
+
+NRules 的规则是 C# 类，因此 `RuleSource` 只声明加载哪些规则（类型或程序集）：
+
+```csharp
+services.AddNRulesRuleBrains();
+
+aether.AddAgent("rule", agent => agent
+    .Engine(EngineKind.Rule)
+    .RuleSource("""{ "ruleTypes": ["MyApp.Rules.QueryRule"] }""")
+    .WithTool("Echo"));
+
+// 规则本身是 NRules 原生写法：
+public sealed class QueryRule : Rule
+{
+    public override void Define()
+    {
+        NRulesDecisionContext d = null!;
+        When().Match<NRulesDecisionContext>(() => d,
+            x => x.UserText.StartsWith("查") && x.ToolCallCount == 0);
+        Then().Do(_ => d.CallTool("Echo", "text", d.UserText.Substring(1)));
+    }
+}
+```
+
+每个决策步新建会话、插入新事实，规则编译只在创建 agent 时做一次；Rete 匹配与议程在步内生效，
+跨步状态用 `ToolCallCount` / `LastResult` 从对话历史重建。细节见
+[`brain-seam.md`](brain-seam.md#nrules-适配器契约)。
+
+后端选择会传播到路由组合内部的规则分支，但路由的入口匹配只理解 `RuleProgram`：
+`EnableBrainRouting` 搭配原生规则后端会产出 `RoutingMatcherBackendMismatch` 告警（规则分支永不命中）。
 
 ## LLM
 
@@ -139,7 +198,7 @@ Routing 默认关闭，仅在显式设置 `EnableBrainRouting=true` 时启用。
 `HarnessRuntime.RegisterAgent` 与 `AgentFactory.Create` 都会校验定义：
 
 - **错误**（抛 `InvalidOperationException`）：非 LLM 引擎启用 `EnableBrainRouting`（路由会接管所选大脑）；非 LLM 引擎声明 `BackgroundAgents`（委派由 LLM 工具回合驱动）。
-- **告警**（构建期记录一次，不刷屏）：规则/代码 agent 上设置了 `ModelId`、`Temperature`、`TopP`、`MaxOutputTokens`、`ResponseFormat`、`EnableWebSearch`、`EnableTodoProvider`、`EnableAgentModeProvider`、`EnableFileMemory`、`EnableLongTermMemory`——这些只对具备 `NaturalLanguageContext` 的大脑生效；LLM agent 携带 `Rules` 但未开路由；Rule agent 的规则程序为空。
+- **告警**（构建期记录一次，不刷屏）：规则/代码 agent 上设置了 `ModelId`、`Temperature`、`TopP`、`MaxOutputTokens`、`ResponseFormat`、`EnableWebSearch`、`EnableTodoProvider`、`EnableAgentModeProvider`、`EnableFileMemory`、`EnableLongTermMemory`——这些只对具备 `NaturalLanguageContext` 的大脑生效；LLM agent 携带 `Rules`/`RuleSource` 但未开路由；Rule agent 既无 `Rules` 也无 `RuleSource`（`EmptyRuleProgram`）；路由选择了非 `program` 规则后端（`RoutingMatcherBackendMismatch`）。
 
 宿主可用 `AgentDefinitionValidation.Check(definition, capabilities)` 在编辑器中提前展示同一套诊断。
 

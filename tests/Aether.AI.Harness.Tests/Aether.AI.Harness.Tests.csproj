@@ -22,6 +22,8 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Aether.AI.Harness\Aether.AI.Harness.csproj" />
     <ProjectReference Include="..\..\src\Aether.AI.Brains.Rule\Aether.AI.Brains.Rule.csproj" />
+    <ProjectReference Include="..\..\src\Aether.AI.Brains.Rule.RulesEngine\Aether.AI.Brains.Rule.RulesEngine.csproj" />
+    <ProjectReference Include="..\..\src\Aether.AI.Brains.Rule.NRules\Aether.AI.Brains.Rule.NRules.csproj" />
     <ProjectReference Include="..\..\src\Aether.AI.Brains.Code\Aether.AI.Brains.Code.csproj" />
     <ProjectReference Include="..\..\src\Aether.AI.Brains.Routing\Aether.AI.Brains.Routing.csproj" />
     <ProjectReference Include="..\..\src\Aether.AI.Brains.Llm\Aether.AI.Brains.Llm.csproj" />

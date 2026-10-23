@@ -55,6 +55,7 @@ public sealed class RuleFirstRoutingClientFactory : IBrainRoutingClientFactory
         // 路由内部的规则分支必须与宿主选择的规则后端一致；否则多后端注册时克隆体会因未指定后端而歧义。
         BrainBackend = source.BrainBackend,
         Rules = source.Rules,
+        RuleSource = source.RuleSource,
         Instructions = source.Instructions,
         ModelId = source.ModelId,
         Tools = source.Tools,

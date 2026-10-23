@@ -44,6 +44,10 @@
     <!-- 代码规则 C# 侧运行时编译 -->
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="4.13.0" />
 
+    <!-- 可选规则后端 Aether.AI.Brains.Rule.RulesEngine（Microsoft RulesEngine，JSON 表达式） -->
+    <PackageVersion Include="RulesEngine" Version="6.0.1" />
+    <PackageVersion Include="NRules" Version="1.0.4" />
+
     <!-- Memory.Sqlite 吸收件 SqliteStoreBase 的唯一依赖 -->
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.10" />
 

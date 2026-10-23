@@ -57,12 +57,12 @@ public class BrainBackendSelectionTests
     {
         var registry = new BrainFactoryRegistry();
         registry.Register(new ProgramBackendFactory());
-        var definition = RuleDefinition("rulesEngine");
+        var definition = RuleDefinition("unknown-backend");
 
         Assert.False(registry.TryResolve(definition, out _));
 
         var error = Assert.Throws<InvalidOperationException>(() => registry.Resolve(definition));
-        Assert.Contains("backend 'rulesEngine'", error.Message);
+        Assert.Contains("backend 'unknown-backend'", error.Message);
         Assert.Contains("Registered backends: 'program'", error.Message);
     }
 

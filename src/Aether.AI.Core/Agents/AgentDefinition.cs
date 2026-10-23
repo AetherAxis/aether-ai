@@ -34,6 +34,12 @@ public sealed class AgentDefinition
     public RuleProgram? Rules { get; init; }
 
     /// <summary>
+    /// 规则后端的原生定义（JSON/文本）。内置 <c>program</c> 后端读取 <see cref="Rules"/>；
+    /// 其他后端（如 <c>rulesEngine</c>）读取此字段——适配器负责解析，Core 不理解其格式。
+    /// </summary>
+    public string? RuleSource { get; init; }
+
+    /// <summary>
     /// 代码大脑语言。仅有效大脑类型为 <see cref="EngineKind.Code"/> 时使用；默认 C#，兼容旧代码笔记。
     /// 该字段不表示是否动态编译，已编译类型与源码编译使用同一语言标识。
     /// </summary>

@@ -4,6 +4,8 @@
   <Project Path="src/Aether.AI.Brains.Abstractions/Aether.AI.Brains.Abstractions.csproj" />
   <Project Path="src/Aether.AI.Brains.Llm/Aether.AI.Brains.Llm.csproj" />
   <Project Path="src/Aether.AI.Brains.Rule/Aether.AI.Brains.Rule.csproj" />
+  <Project Path="src/Aether.AI.Brains.Rule.RulesEngine/Aether.AI.Brains.Rule.RulesEngine.csproj" />
+  <Project Path="src/Aether.AI.Brains.Rule.NRules/Aether.AI.Brains.Rule.NRules.csproj" />
   <Project Path="src/Aether.AI.Brains.Code/Aether.AI.Brains.Code.csproj" />
   <Project Path="src/Aether.AI.Brains.Code.CSharp/Aether.AI.Brains.Code.CSharp.csproj" />
   <Project Path="src/Aether.AI.Brains.Code.FSharp/Aether.AI.Brains.Code.FSharp.fsproj" />

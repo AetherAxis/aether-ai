@@ -40,18 +40,35 @@ public static class AgentDefinitionValidation
         }
 
         // —— 无害但会被忽略的配置：告警 ——
-        if (definition.Engine == EngineKind.Rule && (definition.Rules is null || definition.Rules.Steps.Count == 0))
+        if (definition.Engine == EngineKind.Rule
+            && string.IsNullOrWhiteSpace(definition.RuleSource)
+            && (definition.Rules is null || definition.Rules.Steps.Count == 0))
         {
             issues.Add(new AgentDefinitionIssue(
                 "EmptyRuleProgram",
-                $"Rule agent '{definition.Id}' has no rule steps; every input will return the NoMatch reply."));
+                $"Rule agent '{definition.Id}' has no rule payload (Rules for the program backend, RuleSource for native backends); " +
+                "every input will return the NoMatch reply."));
         }
 
-        if (definition.Engine == EngineKind.Llm && definition.Rules is not null && !definition.EnableBrainRouting)
+        // 路由的入口匹配固定由 RuleProgramMatcher 完成；换成原生规则后端（rulesEngine/nRules）后
+        // 它读不到 RuleProgram，规则分支永远不会命中——此时路由退化成纯 LLM。
+        if (definition.EnableBrainRouting
+            && !string.IsNullOrWhiteSpace(definition.BrainBackend)
+            && !string.Equals(definition.BrainBackend, "program", StringComparison.OrdinalIgnoreCase))
+        {
+            issues.Add(new AgentDefinitionIssue(
+                "RoutingMatcherBackendMismatch",
+                $"Agent '{definition.Id}' enables routing with BrainBackend '{definition.BrainBackend}', but the routing entry matcher " +
+                "only understands RuleProgram ('program' backend). The rule branch will never match and every turn falls back to the LLM."));
+        }
+
+        if (definition.Engine == EngineKind.Llm
+            && (definition.Rules is not null || !string.IsNullOrWhiteSpace(definition.RuleSource))
+            && !definition.EnableBrainRouting)
         {
             issues.Add(new AgentDefinitionIssue(
                 "RulesIgnoredWithoutRouting",
-                $"Agent '{definition.Id}' carries a RuleProgram but EnableBrainRouting is false; the rules will be ignored. " +
+                $"Agent '{definition.Id}' carries rule payload (Rules/RuleSource) but EnableBrainRouting is false; it will be ignored. " +
                 "Set EnableBrainRouting=true to use rule-first routing."));
         }
 
