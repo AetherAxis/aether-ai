@@ -8,6 +8,11 @@
 
   <PropertyGroup>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <!-- Microsoft Agent Framework 把部分 Harness/Responses API 标成 experimental（MAAI001）。
+         Aether 有意包这些 API 并对外只暴露稳定类型——所以在这个仓统一抑制一次，
+         而不是每个用到 MAF 的项目各写一遍（之前 Harness/Hosting/Mcp×2 各抄了一份）。
+         NU5104（预发布包依赖）**不**在这里抑制：它只与 Mcp 的 prerelease 包有关，留在那两个项目里。 -->
+    <NoWarn>$(NoWarn);MAAI001</NoWarn>
   </PropertyGroup>
 
 </Project>

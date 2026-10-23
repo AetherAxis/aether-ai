@@ -104,3 +104,8 @@ dotnet test aether-ai.slnx -c Release --no-build
 | 5 | P2 | 外部进程分支无覆盖 | README 承认 `SkillScriptRunner` 与 MCP 实连缺口 | 注入替身补测 | 需开 internal 接缝 |
 | 6 | P2 | 路由边界未收敛 | `doc/usage.md`：单入口、只支持 Rule↔LLM、丢 sampling | 定义扩展点或文档固化 | 新组合要复制分支逻辑 |
 | 7 | P3 | `SqliteStoreBase` 三份同步 | `Memory.Sqlite` csproj 注释：手动同步三份 | 抽公共包或加检查 | 与「不建 Common 仓」冲突 |
+
+## 7. 本轮升级落地（2026-10-24）
+
+- **MAAI001 集中抑制**：MAF experimental API 的告警从 Harness/Hosting/Mcp×2 四份 per-project `NoWarn` 收到根 `Directory.Build.props` 一处（NU5104 仍留在 Mcp 两处——只与 prerelease 包有关）。
+- **§6 其他项**（Workflows 零测试、Harness.Tests 完整闭包、SkillScriptRunner/MCP 缺口、路由边界、SqliteStoreBase 三份）本轮未动——都需要新增测试面或跨仓重构，留作独立批次。

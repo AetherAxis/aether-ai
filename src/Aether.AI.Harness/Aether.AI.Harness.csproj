@@ -18,10 +18,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <!-- Microsoft Agent Framework marks some Harness/Responses APIs as
-         experimental (MAAI001). Aether wraps them behind stable types, so
-         suppress the diagnostic solution-wide. -->
-    <NoWarn>MAAI001</NoWarn>
+    <!-- MAAI001（MAF experimental API）由根 Directory.Build.props 统一抑制 -->
   </PropertyGroup>
 
 </Project>
