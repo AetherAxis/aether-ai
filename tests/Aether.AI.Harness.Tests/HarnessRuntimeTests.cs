@@ -57,8 +57,8 @@ public class HarnessRuntimeTests
         public object? GetService(Type serviceType, object? serviceKey = null) => null;
     }
 
-    /// <summary>An IChatClientFactory that always hands back a NullChatClient.</summary>
-    private sealed class NullChatClientFactory : IChatClientFactory
+    /// <summary>An Aether.AI.Brains.Abstractions.IChatClientFactory that always hands back a NullChatClient.</summary>
+    private sealed class NullChatClientFactory : Aether.AI.Brains.Abstractions.IChatClientFactory
     {
         public IChatClient Create(string? modelId) => new NullChatClient();
     }

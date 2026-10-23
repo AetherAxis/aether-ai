@@ -1,3 +1,4 @@
+using Aether.AI.Brains.Code;
 using Aether.AI.Brains.Rule;
 using Aether.AI.Core.Agents;
 using Aether.AI.Harness;
@@ -19,26 +20,24 @@ namespace Aether.AI.Memory.Tests;
 public class AddAetherAICompositionTests
 {
     [Fact]
-    public void Legacy_chat_client_factory_registration_is_bridged()
+    public void Current_chat_client_factory_registration_is_resolved()
     {
         var services = new ServiceCollection();
-        var legacyFactory = new LegacyChatClientFactory();
-#pragma warning disable CS0618 // Exercise the former public DI service key.
-        services.AddSingleton<Aether.AI.Harness.Agents.IChatClientFactory>(legacyFactory);
-#pragma warning restore CS0618
+        var chatClientFactory = new StubChatClientFactory();
+        services.AddSingleton<Aether.AI.Brains.Abstractions.IChatClientFactory>(chatClientFactory);
         services.AddAetherAI();
 
         using var provider = services.BuildServiceProvider();
         var factory = provider.GetRequiredService<Aether.AI.Harness.Agents.AgentFactory>();
         var agent = factory.Create(new AgentDefinition
         {
-            Id = "legacy-llm-factory",
-            Name = "legacy",
+            Id = "llm-factory",
+            Name = "llm",
             Engine = EngineKind.Llm,
         });
 
         Assert.NotNull(agent);
-        Assert.Equal(1, legacyFactory.CreateCalls);
+        Assert.Equal(1, chatClientFactory.CreateCalls);
     }
 
     [Fact]
@@ -53,9 +52,7 @@ public class AddAetherAICompositionTests
             services.AddRuleBrains();
             var builder = services.AddAetherAI();
 
-            builder.ConfigureToolRegistry(tools => tools.Register(
-                "Echo", "回声", "测试",
-                _ => AIFunctionFactory.Create((Func<string, string>)(text => $"echo:{text}"), name: "Echo")));
+            builder.AddTool((Func<string, string>)(text => $"echo:{text}"), "Echo");
 
             builder.AddAgent("zero-llm", ab => ab
                 .Name("zero-llm").Instructions("t")
@@ -87,9 +84,44 @@ public class AddAetherAICompositionTests
         }
     }
 
-#pragma warning disable CS0618 // Compatibility test implementation.
-    private sealed class LegacyChatClientFactory : Aether.AI.Harness.Agents.IChatClientFactory
-#pragma warning restore CS0618
+    [Fact]
+    public async Task AddTool_delegate_is_executed_by_code_agent()
+    {
+        var executions = 0;
+        var services = new ServiceCollection();
+        services.AddCodeBrains();
+        var builder = services.AddAetherAI();
+        builder.AddTool(AIFunctionFactory.Create((Func<string, string>)(text =>
+        {
+            Interlocked.Increment(ref executions);
+            return $"echo:{text}";
+        }), "Echo"));
+        builder.AddAgent("code-add-tool", agent => agent
+            .Engine(EngineKind.Code)
+            .WithTool("Echo")
+            .Memory(AgentMemoryMode.Off));
+
+        using var provider = services.BuildServiceProvider();
+        provider.GetRequiredService<ICodeBrainRegistry>().Register(
+            "code-add-tool", static () => new EchoCodeBrain());
+        var runtime = provider.GetRequiredService<HarnessRuntime>();
+        var session = runtime.StartSession("code-add-tool");
+        var output = new System.Text.StringBuilder();
+
+        await runtime.RunStreamingAsync(session.SessionId, "hello",
+            new StreamHandlers { OnToken = (text, _) => { output.Append(text); return Task.CompletedTask; } });
+
+        Assert.Equal(1, executions);
+        Assert.Contains("echo:hello", output.ToString());
+    }
+
+    private sealed class EchoCodeBrain : CodeRuleBrain
+    {
+        protected override async Task<string> RunAsync()
+            => await Call("Echo", new { text = UserText });
+    }
+
+    private sealed class StubChatClientFactory : Aether.AI.Brains.Abstractions.IChatClientFactory
     {
         public int CreateCalls { get; private set; }
 

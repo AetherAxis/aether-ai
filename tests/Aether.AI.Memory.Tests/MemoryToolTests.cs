@@ -96,7 +96,7 @@ public class MemoryToolTests
         var saveFn = AIFunctionFactory.Create(typeof(MemoryTool).GetMethod(nameof(MemoryTool.SaveAsync))!, memoryTool, "save_memory");
         var recallFn = AIFunctionFactory.Create(typeof(MemoryTool).GetMethod(nameof(MemoryTool.RecallAsync))!, memoryTool, "recall_memory");
 
-        var client = new RuleChatClient(new RememberAndRecallBrain());
+        var client = new BrainChatClient(new RememberAndRecallBrain());
         var options = new HarnessAgentOptions
         {
             Id = "code-rule-memory",

@@ -10,7 +10,7 @@ public sealed class RuleBrainFactory : IBrainFactory
     public EngineKind Kind => EngineKind.Rule;
     public BrainCapabilities Capabilities => BrainCapabilities.Tools;
 
-    public bool CanCreate(AgentDefinition definition) => definition.GetEffectiveEngine() == EngineKind.Rule;
+    public bool CanCreate(AgentDefinition definition) => definition.Engine == EngineKind.Rule;
 
     public IBrain Create(AgentDefinition definition)
         => new RuleProgramBrain(definition.Rules ?? new RuleProgram());

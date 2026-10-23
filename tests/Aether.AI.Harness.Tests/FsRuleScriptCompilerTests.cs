@@ -8,7 +8,7 @@ using Microsoft.Extensions.AI;
 namespace Aether.AI.Harness.Tests;
 
 /// <summary>
-/// F# 代码规则大脑（<c>.coderule.fs</c> → FCS 编译 → <c>IRuleBrain</c>）测试。镜像
+/// F# 代码规则大脑（<c>.coderule.fs</c> → FCS 编译 → <c>IBrain</c>）测试。镜像
 /// <see cref="CodeRuleBrainTests"/> 的端到端刺探，验证两条作者形态：
 /// 每步决策式（<c>IFsRuleBrain</c> + <c>Step</c> DU，经 <c>FsRuleBrainAdapter</c> 包装）与
 /// 线性流程式（<c>FsCodeRuleBrain</c> 继承 C# <see cref="CodeRuleBrain"/>，F# task CE 直接
@@ -22,7 +22,7 @@ public class FsRuleScriptCompilerTests
     /// <summary>线性流程式（spike 核心）：F# task CE await C# CallAwaitable——FS-1097 互操作。</summary>
     private const string LinearEchoFs = @"
 open System.Threading.Tasks
-open Aether.AI.Harness.FSharp
+open Aether.AI.Brains.Code.FSharp
 
 type FsEchoBrain() =
     inherit FsCodeRuleBrain()
@@ -36,7 +36,7 @@ type FsEchoBrain() =
     /// <summary>线性多步链：两次 let! Call 顺序执行，第二次用第一次结果（协程状态跨挂起存活）。</summary>
     private const string LinearChainFs = @"
 open System.Threading.Tasks
-open Aether.AI.Harness.FSharp
+open Aether.AI.Brains.Code.FSharp
 
 type FsChainBrain() =
     inherit FsCodeRuleBrain()
@@ -52,7 +52,7 @@ type FsChainBrain() =
 
     /// <summary>每步决策式：Step 0 调工具，之后用 LastResult 终答（经 FsRuleBrainAdapter 包装）。</summary>
     private const string StepwiseRouterFs = @"
-open Aether.AI.Harness.FSharp
+open Aether.AI.Brains.Code.FSharp
 
 type FsRouter() =
     interface IFsRuleBrain with
@@ -62,13 +62,26 @@ type FsRouter() =
             | _ -> Reply(""fs回:"" + ctx.LastResult)
 ";
 
+    private const string OrdinaryAwaitFs = @"
+open System.Threading.Tasks
+open Aether.AI.Brains.Code.FSharp
+
+type FsAwaitBrain() =
+    inherit FsCodeRuleBrain()
+    override this.RunAsync() =
+        task {
+            do! Task.Delay(25)
+            return ""fs-await-ok""
+        }
+";
+
     private const string BrokenFs = @"
 let broken = (
 ";
 
     private const string ThrowingCtorFs = @"
 open System.Threading.Tasks
-open Aether.AI.Harness.FSharp
+open Aether.AI.Brains.Code.FSharp
 
 type ThrowingFs() =
     inherit FsCodeRuleBrain()
@@ -99,13 +112,13 @@ type ThrowingFs() =
         Assert.Null(error);
 
         // 第一步：产出工具调用（Call）。
-        var ctx1 = new RuleContext { LatestUser = new ChatMessage(ChatRole.User, "hello") };
+        var ctx1 = new BrainContext { LatestUser = new ChatMessage(ChatRole.User, "hello") };
         var output1 = await brain!.DecideAsync(ctx1, default);
         var call = Assert.Single(output1.OfType<FunctionCallContent>());
         Assert.Equal("Echo", call.Name);
 
         // 第二步：喂工具结果 → 用 LastResult 终答。
-        var ctx2 = new RuleContext
+        var ctx2 = new BrainContext
         {
             LatestUser = new ChatMessage(ChatRole.User, "hello"),
             LatestToolResult = new FunctionResultContent(call.CallId, "echo:hello"),
@@ -113,6 +126,18 @@ type ThrowingFs() =
         };
         var output2 = await brain.DecideAsync(ctx2, default);
         Assert.Equal("fs回:echo:hello", Assert.Single(output2.OfType<TextContent>()).Text);
+    }
+
+    [Fact]
+    public async Task Fs_linear_ordinary_await_then_return_waits_for_completion()
+    {
+        Assert.True(FsRuleScriptCompiler.TryCompile(OrdinaryAwaitFs, out var brain, out var error), error);
+
+        var decision = brain!.DecideAsync(new BrainContext(), default).AsTask();
+
+        Assert.False(decision.IsCompleted);
+        var contents = await decision;
+        Assert.Equal("fs-await-ok", Assert.Single(contents.OfType<TextContent>()).Text);
     }
 
     [Fact]
@@ -174,7 +199,7 @@ type ThrowingFs() =
         // spike 核心端到端：F# task CE 挂起在 C# CallAwaiter → MAF 执行工具 → 结果回喂 → F# 协程恢复 → 终答。
         Assert.True(FsRuleScriptCompiler.TryCompile(LinearEchoFs, out var brain, out var error), error);
         var echo = AIFunctionFactory.Create((Func<string, string>)Echo);
-        var client = new RuleChatClient(brain!);
+        var client = new BrainChatClient(brain!);
         var options = new HarnessAgentOptions
         {
             Id = "fs-rule-spike",
@@ -206,7 +231,7 @@ type ThrowingFs() =
         // 两次 let! Call 顺序执行；mutable 字段跨挂起存活；第二次调用用第一次结果。
         Assert.True(FsRuleScriptCompiler.TryCompile(LinearChainFs, out var brain, out var error), error);
         var echo = AIFunctionFactory.Create((Func<string, string>)Echo);
-        var client = new RuleChatClient(brain!);
+        var client = new BrainChatClient(brain!);
         var options = new HarnessAgentOptions
         {
             Id = "fs-rule-chain",
@@ -238,7 +263,7 @@ type ThrowingFs() =
         // 每步式（IFsRuleBrain 经 FsRuleBrainAdapter）同过 MAF 循环：Call → 工具执行 → Reply 终答。
         Assert.True(FsRuleScriptCompiler.TryCompile(StepwiseRouterFs, out var brain, out var error), error);
         var echo = AIFunctionFactory.Create((Func<string, string>)Echo);
-        var client = new RuleChatClient(brain!);
+        var client = new BrainChatClient(brain!);
         var options = new HarnessAgentOptions
         {
             Id = "fs-rule-stepwise",

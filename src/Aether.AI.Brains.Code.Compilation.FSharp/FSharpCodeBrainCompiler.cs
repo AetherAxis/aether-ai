@@ -1,6 +1,7 @@
 using Aether.AI.Brains.Code.Compilation;
 using Aether.AI.Core.Agents;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Aether.AI.Brains.Code.Compilation.FSharp;
 
@@ -31,7 +32,9 @@ public static class FSharpCompilationServiceCollectionExtensions
 {
     public static IServiceCollection AddFSharpBrainCompilation(this IServiceCollection services)
     {
-        services.AddSingleton<ICodeBrainCompiler, FSharpCodeBrainCompiler>();
+        ArgumentNullException.ThrowIfNull(services);
+        services.AddCodeCompilation();
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<ICodeBrainCompiler, FSharpCodeBrainCompiler>());
         return services;
     }
 }

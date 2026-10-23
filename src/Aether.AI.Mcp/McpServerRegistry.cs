@@ -165,6 +165,7 @@ public sealed class McpServerRegistry : IMcpServerRegistry, IAsyncDisposable
             };
             if (cfg.Env is not null)
             {
+                opts.EnvironmentVariables ??= new Dictionary<string, string?>();
                 foreach (var kv in cfg.Env) opts.EnvironmentVariables[kv.Key] = kv.Value;
             }
             return await McpClient.CreateAsync(new StdioClientTransport(opts), cancellationToken: ct).ConfigureAwait(false);
@@ -176,6 +177,7 @@ public sealed class McpServerRegistry : IMcpServerRegistry, IAsyncDisposable
             var opts = new HttpClientTransportOptions { Endpoint = new Uri(cfg.Url!) };
             if (cfg.Headers is not null)
             {
+                opts.AdditionalHeaders ??= new Dictionary<string, string>();
                 foreach (var kv in cfg.Headers) opts.AdditionalHeaders.Add(kv.Key, kv.Value);
             }
             return await McpClient.CreateAsync(new HttpClientTransport(opts), cancellationToken: ct).ConfigureAwait(false);

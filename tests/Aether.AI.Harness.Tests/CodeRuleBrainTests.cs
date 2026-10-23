@@ -1,3 +1,4 @@
+using Aether.AI.Brains.Abstractions;
 using Aether.AI.Brains.Code;
 using Aether.AI.Brains.Code.Compilation.CSharp;
 using Aether.AI.Harness.Agents;
@@ -8,7 +9,7 @@ namespace Aether.AI.Harness.Tests;
 
 /// <summary>
 /// 代码规则大脑（<see cref="CodeRuleBrain"/>）测试：验证「C# 源码 → Roslyn 编译 → 代码大脑」管线，
-/// 及代码大脑经 <see cref="RuleChatClient"/> + <c>AsHarnessAgent</c> 驱动 MAF agent 循环（工具执行 →
+/// 及代码大脑经 <see cref="BrainChatClient"/> + <c>AsHarnessAgent</c> 驱动 MAF agent 循环（工具执行 →
 /// 结果回填 → 终答终止）。镜像 <see cref="RuleAgentTests"/> 的端到端刺探，区别在大脑是 C# 代码而非 YAML 规则程序。
 /// </summary>
 public class CodeRuleBrainTests
@@ -21,7 +22,6 @@ public class CodeRuleBrainTests
         var source = @"
 using System.Threading.Tasks;
 using Aether.AI.Brains.Code;
-using Aether.AI.Harness.Agents;
 
 public class CompiledEcho : CodeRuleBrain
 {
@@ -35,44 +35,9 @@ public class CompiledEcho : CodeRuleBrain
         Assert.Null(error);
 
         // 编译产物是 CodeRuleBrain 子类——喂上下文验证它确实按源码逻辑回终答。
-        var ctx = new RuleContext { LatestUser = new ChatMessage(ChatRole.User, "world") };
+        var ctx = new BrainContext { LatestUser = new ChatMessage(ChatRole.User, "world") };
         var output = await brain!.DecideAsync(ctx, default);
         Assert.Equal("hi world", Assert.Single(output.OfType<TextContent>()).Text);
-    }
-
-    [Fact]
-    public void RuleScriptCompiler_compiles_legacy_fully_qualified_base_type()
-    {
-        var source = @"
-using System.Threading.Tasks;
-
-public class LegacyEcho : Aether.AI.Harness.Agents.CodeRuleBrain
-{
-    protected override Task<string> RunAsync() => Task.FromResult(""legacy"");
-}";
-
-        var ok = RuleScriptCompiler.TryCompile(source, out var brain, out var error);
-
-        Assert.True(ok, error ?? "(no error)");
-        Assert.NotNull(brain);
-    }
-
-    [Fact]
-    public void RuleScriptCompiler_compiles_legacy_namespace_import()
-    {
-        var source = @"
-using System.Threading.Tasks;
-using Aether.AI.Harness.Agents;
-
-public class LegacyImportedEcho : CodeRuleBrain
-{
-    protected override Task<string> RunAsync() => Task.FromResult(""legacy-import"");
-}";
-
-        var ok = RuleScriptCompiler.TryCompile(source, out var brain, out var error);
-
-        Assert.True(ok, error ?? "(no error)");
-        Assert.NotNull(brain);
     }
 
     [Fact]
@@ -82,7 +47,6 @@ public class LegacyImportedEcho : CodeRuleBrain
         var source = @"
 using System.Threading.Tasks;
 using Aether.AI.Brains.Code;
-using Aether.AI.Harness.Agents;
 
 public class Broken : CodeRuleBrain
 {
@@ -118,7 +82,6 @@ public class Broken : CodeRuleBrain
 using System;
 using System.Threading.Tasks;
 using Aether.AI.Brains.Code;
-using Aether.AI.Harness.Agents;
 
 public class ThrowingCtorBrain : CodeRuleBrain
 {
@@ -141,7 +104,7 @@ public class ThrowingCtorBrain : CodeRuleBrain
     {
         // 用户消息原样调 Echo → await 拿回结果 → 终答。验证协程 Call 挂起/恢复闭环。
         var echo = AIFunctionFactory.Create((Func<string, string>)Echo);
-        var client = new RuleChatClient(new ToolThenReplyBrain());
+        var client = new BrainChatClient(new ToolThenReplyBrain());
         var options = new HarnessAgentOptions
         {
             Id = "code-rule-spike",
@@ -176,7 +139,7 @@ public class ThrowingCtorBrain : CodeRuleBrain
         // await 拿回结果后用 _captured（字段，非可从 LatestUser 推导）+ 工具结果终答。
         // 终答必含 "_step0"——只有字段持久化才可能；并含 "echo:abc"——证明 Call 结果正确回喂。
         var echo = AIFunctionFactory.Create((Func<string, string>)Echo);
-        var client = new RuleChatClient(new StatefulBrain());
+        var client = new BrainChatClient(new StatefulBrain());
         var options = new HarnessAgentOptions
         {
             Id = "code-rule-stateful",
@@ -205,7 +168,7 @@ public class ThrowingCtorBrain : CodeRuleBrain
         // 协程式最自然的写法：两次 await Call 顺序执行，第二次用第一次的结果做参数。
         // 状态机式要靠 Step 计数分支；协程式就是线性 await。终答 = 串联两次 echo。
         var echo = AIFunctionFactory.Create((Func<string, string>)Echo);
-        var client = new RuleChatClient(new ChainedBrain());
+        var client = new BrainChatClient(new ChainedBrain());
         var options = new HarnessAgentOptions
         {
             Id = "code-rule-chain",
@@ -231,7 +194,156 @@ public class ThrowingCtorBrain : CodeRuleBrain
         Assert.Equal("echo:echo:hi", finalText);
     }
 
+    [Fact]
+    public async Task Ordinary_await_then_return_waits_for_completion()
+    {
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var decision = new AwaitThenReturnBrain(gate.Task).DecideAsync(new BrainContext(), default).AsTask();
+
+        Assert.False(decision.IsCompleted);
+        gate.SetResult();
+
+        var contents = await decision;
+        Assert.Equal("ok", Assert.Single(contents.OfType<TextContent>()).Text);
+    }
+
+    [Fact]
+    public async Task Ordinary_await_then_call_yields_after_completion()
+    {
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var brain = new AwaitThenCallBrain(gate.Task);
+        var decision = brain.DecideAsync(new BrainContext(), default).AsTask();
+
+        Assert.False(decision.IsCompleted);
+        gate.SetResult();
+
+        var call = Assert.Single((await decision).OfType<FunctionCallContent>());
+        var final = await brain.DecideAsync(new BrainContext
+        {
+            ToolCallsThisTurn = 1,
+            LatestToolResult = new FunctionResultContent(call.CallId, "echoed"),
+        }, default);
+        Assert.Equal("echoed", Assert.Single(final.OfType<TextContent>()).Text);
+    }
+
+    [Fact]
+    public async Task Call_then_ordinary_await_then_call_preserves_coroutine()
+    {
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var brain = new CallAwaitCallBrain(gate.Task);
+        var first = Assert.Single((await brain.DecideAsync(new BrainContext(), default)).OfType<FunctionCallContent>());
+        var secondDecision = brain.DecideAsync(new BrainContext
+        {
+            ToolCallsThisTurn = 1,
+            LatestToolResult = new FunctionResultContent(first.CallId, "one"),
+        }, default).AsTask();
+
+        Assert.False(secondDecision.IsCompleted);
+        gate.SetResult();
+
+        var second = Assert.Single((await secondDecision).OfType<FunctionCallContent>());
+        var final = await brain.DecideAsync(new BrainContext
+        {
+            ToolCallsThisTurn = 2,
+            LatestToolResult = new FunctionResultContent(second.CallId, "two"),
+        }, default);
+        Assert.Equal("one|two", Assert.Single(final.OfType<TextContent>()).Text);
+    }
+
+    [Fact]
+    public async Task Cancellation_during_ordinary_await_runs_finally()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var brain = new CancelableBrain();
+        var decision = brain.DecideAsync(new BrainContext(), cancellation.Token).AsTask();
+
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => decision);
+        Assert.True(brain.CleanedUp);
+    }
+
+    [Fact]
+    public async Task Cancellation_while_waiting_for_call_runs_finally()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var brain = new CallCleanupBrain();
+        Assert.Single((await brain.DecideAsync(new BrainContext(), cancellation.Token)).OfType<FunctionCallContent>());
+
+        cancellation.Cancel();
+
+        await brain.Cleanup.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.True(brain.CleanedUp);
+    }
+
     private static string Echo(string text) => $"echo:{text}";
+
+    private sealed class AwaitThenReturnBrain(Task gate) : CodeRuleBrain
+    {
+        protected override async Task<string> RunAsync()
+        {
+            await gate;
+            return "ok";
+        }
+    }
+
+    private sealed class AwaitThenCallBrain(Task gate) : CodeRuleBrain
+    {
+        protected override async Task<string> RunAsync()
+        {
+            await gate;
+            return await Call("Echo");
+        }
+    }
+
+    private sealed class CallAwaitCallBrain(Task gate) : CodeRuleBrain
+    {
+        protected override async Task<string> RunAsync()
+        {
+            var first = await Call("Echo");
+            await gate;
+            var second = await Call("Echo");
+            return $"{first}|{second}";
+        }
+    }
+
+    private sealed class CancelableBrain : CodeRuleBrain
+    {
+        public bool CleanedUp { get; private set; }
+
+        protected override async Task<string> RunAsync()
+        {
+            try
+            {
+                await Task.Delay(Timeout.InfiniteTimeSpan, RunCancellationToken);
+                return "unreachable";
+            }
+            finally
+            {
+                CleanedUp = true;
+            }
+        }
+    }
+
+    private sealed class CallCleanupBrain : CodeRuleBrain
+    {
+        private readonly TaskCompletionSource _cleanup = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public Task Cleanup => _cleanup.Task;
+        public bool CleanedUp { get; private set; }
+
+        protected override async Task<string> RunAsync()
+        {
+            try
+            {
+                return await Call("Echo");
+            }
+            finally
+            {
+                CleanedUp = true;
+                _cleanup.TrySetResult();
+            }
+        }
+    }
 
     /// <summary>await Call(Echo) → 用 await 返回值终答。证明协程挂起/恢复闭环。</summary>
     private sealed class ToolThenReplyBrain : CodeRuleBrain

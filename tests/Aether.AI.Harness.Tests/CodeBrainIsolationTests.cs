@@ -11,7 +11,7 @@ namespace Aether.AI.Harness.Tests;
 /// 代码大脑跨会话状态隔离回归（2026-10-23 修复的钉子）：
 /// <see cref="AgentRuntimeRegistry"/> 按 agentId 缓存<b>单个</b> AIAgent——修复前
 /// <see cref="AgentFactory"/> 构建时创建的<b>一个</b> <see cref="CodeRuleBrain"/> 实例被缓存 agent 的
-/// <see cref="RuleChatClient"/> 持有，同一 agentId 的多个会话共享其协程状态（Context/_continuation/
+/// <see cref="BrainChatClient"/> 持有，同一 agentId 的多个会话共享其协程状态（Context/_continuation/
 /// _pendingResult/作者字段）：B 会话的 Step==0 会 <c>ResetCoroutine</c> 掉 A 会话挂起中的续体。
 /// 修复：RunScopedBrainRouter 按 run（用户 turn）路由 fresh 实例（挂起 callId → 大脑映射）。
 /// </summary>
@@ -47,8 +47,7 @@ public class CodeBrainIsolationTests
             Id = "code-iso",
             Name = "Iso",
             Instructions = "t",
-            Engine = EngineKind.Rule,
-            IsCodeRule = true,
+            Engine = EngineKind.Code,
             Tools = new[] { "Gate" },
             Memory = AgentMemoryMode.Off,
         });
@@ -94,8 +93,7 @@ public class CodeBrainIsolationTests
             Id = "code-turn",
             Name = "Turn",
             Instructions = "t",
-            Engine = EngineKind.Rule,
-            IsCodeRule = true,
+            Engine = EngineKind.Code,
             Tools = new[] { "Gate" },
             Memory = AgentMemoryMode.Off,
         });
@@ -156,7 +154,7 @@ public class CodeBrainIsolationTests
         public object? GetService(Type serviceType, object? serviceKey = null) => null;
     }
 
-    private sealed class NullChatClientFactory : IChatClientFactory
+    private sealed class NullChatClientFactory : Aether.AI.Brains.Abstractions.IChatClientFactory
     {
         public IChatClient Create(string? modelId) => new NullChatClient();
     }

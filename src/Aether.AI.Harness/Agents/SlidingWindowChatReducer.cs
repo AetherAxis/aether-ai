@@ -8,7 +8,7 @@ namespace Aether.AI.Harness.Agents;
 /// framework's <c>InMemoryChatHistoryProvider</c> at agent build time.
 /// </summary>
 /// <remarks>
-/// 截断起点会调整到「安全 user 起点」（user 角色 + 不含 <see cref="FunctionResultContent"/>）：
+/// 截断起点会调整到包含非空文本的业务 user 消息：
 /// 朴素 <c>Skip(Count-max)</c> 可能切断 tool_use→tool_result 配对（窗口首条是 tool 结果但它的
 /// tool 调用已被截掉）或让首条不是 user 角色——两者都会让 GLM/Anthropic 兼容端点报 messages 非法
 /// （如 GLM [1214]）。从 user 文本起点开始可保证首条为 user，且其后每个 tool 结果都有对应的 tool 调用
@@ -58,8 +58,7 @@ public sealed class SlidingWindowChatReducer : IChatReducer
         return 0; // 无安全起点：不截断
     }
 
-    /// <summary>安全起点：user 角色 + 不含 tool 结果（tool 结果的配对 tool 调用可能已被截断）。</summary>
-    private static bool IsSafeUserStart(ChatMessage m)
-        => m.Role == ChatRole.User
-           && !m.Contents.Any(c => c is FunctionResultContent);
+    /// <summary>审批响应和工具结果是协议消息，不能作为对话轮次起点。</summary>
+    private static bool IsSafeUserStart(ChatMessage message)
+        => ChatMessageClassification.IsBusinessUserMessage(message);
 }

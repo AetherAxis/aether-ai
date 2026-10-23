@@ -12,7 +12,6 @@
   <Project Path="src/Aether.AI.Brains.Code.Compilation.FSharp/Aether.AI.Brains.Code.Compilation.FSharp.csproj" />
   <Project Path="src/Aether.AI.Brains.Routing/Aether.AI.Brains.Routing.csproj" />
   <Project Path="src/Aether.AI.Harness/Aether.AI.Harness.csproj" />
-  <Project Path="src/Aether.AI.Harness.Scripting/Aether.AI.Harness.Scripting.csproj" />
   <Project Path="src/Aether.AI.Hosting/Aether.AI.Hosting.csproj" />
   <Project Path="src/Aether.AI.Mcp/Aether.AI.Mcp.csproj" />
   <Project Path="src/Aether.AI.Memory/Aether.AI.Memory.csproj" />

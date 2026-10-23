@@ -39,8 +39,11 @@ public sealed class RestoringChatHistoryProvider : ChatHistoryProvider
 
     protected override async ValueTask<IEnumerable<ChatMessage>> ProvideChatHistoryAsync(InvokingContext context, CancellationToken cancellationToken)
     {
+        var session = context.Session
+            ?? throw new InvalidOperationException("Chat history requires an agent session.");
+
         // 首次：从 DB 恢复历史，存入内存缓存
-        if (_store is not null && _sessionMap.TryGet(context.Session, out var conversationId) && !_restoredSessions.TryGetValue(context.Session, out _))
+        if (_store is not null && _sessionMap.TryGet(session, out var conversationId) && !_restoredSessions.TryGetValue(session, out _))
         {
             try
             {
@@ -56,19 +59,19 @@ public sealed class RestoringChatHistoryProvider : ChatHistoryProvider
                         eventsByRun[run.Id] = await _store.GetEventsAsync(run.Id, cancellationToken).ConfigureAwait(false);
                     }
                     var messages = EventHistoryRebuilder.RebuildLlmHistory(runs, eventsByRun);
-                    _sessionMessages.AddOrUpdate(context.Session, messages.ToList());
+                    _sessionMessages.AddOrUpdate(session, messages.ToList());
                 }
-                _restoredSessions.AddOrUpdate(context.Session, new object());
+                _restoredSessions.AddOrUpdate(session, new object());
             }
             catch (Exception ex)
             {
                 _loggerFactory?.CreateLogger<RestoringChatHistoryProvider>()?.LogWarning(ex, "恢复会话历史失败，使用空历史。");
-                _restoredSessions.AddOrUpdate(context.Session, new object());
+                _restoredSessions.AddOrUpdate(session, new object());
             }
         }
 
         // 从内存返回历史
-        var list = _sessionMessages.GetValue(context.Session, _ => new List<ChatMessage>());
+        var list = _sessionMessages.GetValue(session, _ => new List<ChatMessage>());
 
         // 应用 reducer（SlidingWindow 截断），再净化。用 SanitizeProviderHistory（非 Sanitize）——
         // 活路径 FICC 循环里最近一轮的 tool_call 在 Provide 时尚无 result（下一轮 Store 才落地），
@@ -87,9 +90,10 @@ public sealed class RestoringChatHistoryProvider : ChatHistoryProvider
     /// </summary>
     protected override ValueTask StoreChatHistoryAsync(InvokedContext context, CancellationToken cancellationToken)
     {
-        if (context.Session is null) return default;
+        var session = context.Session;
+        if (session is null) return default;
 
-        var list = _sessionMessages.GetValue(context.Session, _ => new List<ChatMessage>());
+        var list = _sessionMessages.GetValue(session, _ => new List<ChatMessage>());
         foreach (var msg in context.RequestMessages ?? Enumerable.Empty<ChatMessage>())
         {
             var filtered = FilterMessage(msg);

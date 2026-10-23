@@ -74,6 +74,29 @@ public class SlidingWindowChatReducerTests
     }
 
     [Fact]
+    public async Task Approval_response_is_not_a_safe_truncation_start()
+    {
+        var reducer = new SlidingWindowChatReducer(1);
+        var call = new FunctionCallContent("approval-call", "Delete", new Dictionary<string, object?>());
+        var approvalResponse = new ChatMessage { Role = ChatRole.User };
+        approvalResponse.Contents.Add(new ToolApprovalResponseContent("approval-request", false, call));
+        var assistantCall = new ChatMessage { Role = ChatRole.Assistant };
+        assistantCall.Contents.Add(call);
+        var messages = new List<ChatMessage>
+        {
+            User("delete file"),
+            assistantCall,
+            approvalResponse,
+        };
+
+        var result = (await reducer.ReduceAsync(messages)).ToList();
+
+        Assert.Equal(messages.Count, result.Count);
+        Assert.Equal("delete file", TextOf(result[0]));
+        Assert.Contains(result.SelectMany(message => message.Contents), content => content is FunctionCallContent);
+    }
+
+    [Fact]
     public async Task Tool_heavy_single_turn_does_not_truncate_when_no_safe_start()
     {
         // 单轮大量 tool 往返：唯一的 user 文本在最前面，超出回退范围 → 不截断（避免发非法序列）

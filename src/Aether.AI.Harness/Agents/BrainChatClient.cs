@@ -59,16 +59,12 @@ public class BrainChatClient : IChatClient
     /// <summary>从对话历史 + ChatOptions 推导求值上下文（无状态）。</summary>
     private static BrainContext BuildContext(IList<ChatMessage> history, ChatOptions? options)
     {
-        // 找最后一条「真正的用户输入」：User 角色 + 不含 FunctionResultContent。
-        // 工具结果也是 ChatRole.User（装 FunctionResultContent，无 TextContent）——若取到它，
-        // LatestUser.Text 会是空 → 程序级 Capture/{user.N} 替换、toolCallsThisTurn、OnUserRegex 全错。
-        // 镜像 SlidingWindowChatReducer「安全 user 起点 = user 角色 + 不含 FunctionResultContent」。
+        // 审批响应和工具结果也可能使用 User 角色；只有携带文本的 User 消息才是业务输入。
         ChatMessage? latestUser = null;
         var lastUserIndex = -1;
         for (var i = history.Count - 1; i >= 0; i--)
         {
-            if (history[i].Role == ChatRole.User
-                && !history[i].Contents.Any(c => c is FunctionResultContent))
+            if (ChatMessageClassification.IsBusinessUserMessage(history[i]))
             {
                 latestUser = history[i];
                 lastUserIndex = i;
@@ -103,7 +99,7 @@ public class BrainChatClient : IChatClient
 
         var tools = options?.Tools?.OfType<AIFunction>().ToList() ?? new List<AIFunction>();
 
-        return new RuleContext
+        return new BrainContext
         {
             SessionId = AgentExecutionContext.CurrentConversationId.Value,
             LatestUser = latestUser,

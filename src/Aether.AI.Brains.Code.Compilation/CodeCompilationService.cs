@@ -26,7 +26,15 @@ public sealed class CodeCompilationService : ICodeCompilationService
     {
         _source = source;
         _registry = registry;
-        _compilers = compilers.ToDictionary(c => c.Language);
+        var compilerGroups = compilers.GroupBy(compiler => compiler.Language).ToArray();
+        var duplicate = compilerGroups.FirstOrDefault(group => group.Select(compiler => compiler.GetType()).Distinct().Count() > 1);
+        if (duplicate is not null)
+        {
+            throw new InvalidOperationException(
+                $"Multiple code compilers are registered for {duplicate.Key}: "
+                + string.Join(", ", duplicate.Select(compiler => compiler.GetType().FullName)));
+        }
+        _compilers = compilerGroups.ToDictionary(group => group.Key, group => group.First());
         _logger = logger;
     }
 
@@ -60,7 +68,11 @@ public sealed class CodeCompilationService : ICodeCompilationService
             var activeKeys = new Dictionary<CodeBrainLanguage, HashSet<string>>();
             foreach (var note in notes)
             {
-                var language = ParseLanguage(note.Language);
+                if (!TryParseLanguage(note.Language, out var language))
+                {
+                    RecordError(note.Id, $"不支持的代码语言: {note.Language}");
+                    continue;
+                }
                 var source = note.Content;
                 if (string.IsNullOrWhiteSpace(source))
                 {
@@ -109,10 +121,25 @@ public sealed class CodeCompilationService : ICodeCompilationService
         _logger.LogWarning("Code brain compilation failed for {Id}: {Error}", id, error);
     }
 
-    public static CodeBrainLanguage ParseLanguage(string? value)
-        => string.Equals(value, "fsharp", StringComparison.OrdinalIgnoreCase)
-            ? CodeBrainLanguage.FSharp
-            : CodeBrainLanguage.CSharp;
+    public static bool TryParseLanguage(string? value, out CodeBrainLanguage language)
+    {
+        if (string.IsNullOrWhiteSpace(value)
+            || string.Equals(value, "csharp", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(value, "cs", StringComparison.OrdinalIgnoreCase))
+        {
+            language = CodeBrainLanguage.CSharp;
+            return true;
+        }
+        if (string.Equals(value, "fsharp", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(value, "fs", StringComparison.OrdinalIgnoreCase))
+        {
+            language = CodeBrainLanguage.FSharp;
+            return true;
+        }
+
+        language = default;
+        return false;
+    }
 
     public static string SourceKey(CodeBrainLanguage language, string source)
         => $"{language}:{Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(source)))}";

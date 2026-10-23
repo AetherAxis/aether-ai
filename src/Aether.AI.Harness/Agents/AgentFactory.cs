@@ -21,7 +21,7 @@ namespace Aether.AI.Harness.Agents;
 /// to the <see cref="SkillRegistry"/> prompt-only set.
 /// <para>
 /// <see cref="AgentDefinition.Engine"/> == <see cref="EngineKind.Rule"/> swaps
-/// the brain: <see cref="RuleChatClient"/> (deterministic rules, no LLM) drives
+/// the brain: <see cref="BrainChatClient"/> (deterministic rules, no LLM) drives
 /// the same tool/streaming/approval ecosystem — see <c>BuildRuleAgent</c>.
 /// </para>
 /// <para>
@@ -143,7 +143,7 @@ public sealed class AgentFactory
 
         var historyProvider = _historyProviderFactory?.Invoke(definition) ?? BuildHistoryProvider(definition);
 
-        // 规则大脑：确定性规则驱动工具调用，不委托 LLM。接缝是 IChatClient——RuleChatClient 产 AIContent，
+        // 规则大脑：确定性规则驱动工具调用，不委托 LLM。接缝是 IChatClient——BrainChatClient 产 AIContent，
         // 工具执行/回填/循环仍归 MAF HarnessAgent（与 LLM 路径同源）。规则不消费注入式 NL 上下文
         //（todo/mode/skill/memory-recall），BuildRuleAgent 内关掉这些 provider（1.0 已验证 TodoProvider
         // 会注入第二条 user 消息污染 LatestUser）。
@@ -156,11 +156,11 @@ public sealed class AgentFactory
             return BuildBrainAgent(definition, tools, historyProvider, routingClient);
         }
 
-        if (definition.GetEffectiveEngine() is EngineKind.Rule or EngineKind.Code)
+        if (definition.Engine is EngineKind.Rule or EngineKind.Code)
         {
             var brain = _brainFactories?.Resolve(definition).Create(definition)
                 ?? throw new InvalidOperationException(
-                    $"No {definition.GetEffectiveEngine()} brain implementation is registered for agent '{definition.Id}'.");
+                    $"No {definition.Engine} brain implementation is registered for agent '{definition.Id}'.");
             TrackSessionStateOwner(brain);
             return BuildBrainAgent(definition, tools, historyProvider,
                 new BrainChatClient(brain, _loggerFactory?.CreateLogger<BrainChatClient>()));
@@ -214,9 +214,9 @@ public sealed class AgentFactory
         {
             Id = definition.Id,
             Name = definition.Name,
-            Description = $"Aether.AI {definition.GetEffectiveEngine()} agent '{definition.Id}'.",
+            Description = $"Aether.AI {definition.Engine} agent '{definition.Id}'.",
             // 规则不消费注入式 NL 上下文——全关。TodoProvider 默认开，会注入「### Current todo list」
-            // user 消息污染 RuleChatClient 的 LatestUser 检测（1.0 实测）。
+            // user 消息污染 BrainChatClient 的 LatestUser 检测（1.0 实测）。
             DisableWebSearch = true,
             DisableTodoProvider = true,
             DisableAgentModeProvider = true,
@@ -329,7 +329,7 @@ public sealed class AgentFactory
         if (!string.IsNullOrEmpty(SkillsDirectory))
         {
             provider = new AgentSkillsProviderBuilder()
-                .UseLoggerFactory(_loggerFactory)
+                .UseLoggerFactory(_loggerFactory ?? Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance)
                 .UseFileSkill(SkillsDirectory, options: null, _skillScriptRunner)
                 .UseOptions(DisableSkillApprovals)
                 .UseCachingOptions(c => c.RefreshInterval = TimeSpan.FromSeconds(30))
@@ -346,7 +346,7 @@ public sealed class AgentFactory
                 .ToArray();
             // 内存源无 IO——builder 默认缓存恒命中零成本，无需 TTL 配置。
             provider = new AgentSkillsProviderBuilder()
-                .UseLoggerFactory(_loggerFactory)
+                .UseLoggerFactory(_loggerFactory ?? Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance)
                 .UseSkills(agentSkills)
                 .UseOptions(DisableSkillApprovals)
                 .Build();
@@ -467,7 +467,7 @@ public sealed class AgentFactory
                 + "向用户说明已取消并等待进一步指示，或改用其它方式继续；同一问题在一次会话中最多调用 ask_user 一次。";
         }
 
-        if (definition.GetEffectiveEngine() == EngineKind.Llm)
+        if (definition.Engine == EngineKind.Llm)
         {
             if (definition.Temperature is { } temperature)
             {

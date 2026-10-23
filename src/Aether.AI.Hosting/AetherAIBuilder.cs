@@ -55,8 +55,12 @@ public sealed class AetherAIBuilder
     /// <summary>Registers a pre-built <see cref="AIFunction"/> tool.</summary>
     public AetherAIBuilder AddTool(AIFunction tool)
     {
-        _services.AddSingleton(tool);
-        return this;
+        ArgumentNullException.ThrowIfNull(tool);
+        return ConfigureToolRegistry(registry => registry.Register(
+            tool.Name,
+            tool.Description ?? string.Empty,
+            "Custom",
+            _ => tool));
     }
 
     /// <summary>
@@ -65,8 +69,8 @@ public sealed class AetherAIBuilder
     /// </summary>
     public AetherAIBuilder AddTool(Delegate method, string? name = null)
     {
-        _services.AddSingleton(AIFunctionFactory.Create(method, name));
-        return this;
+        ArgumentNullException.ThrowIfNull(method);
+        return AddTool(AIFunctionFactory.Create(method, name));
     }
 
     /// <summary>

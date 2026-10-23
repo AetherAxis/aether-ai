@@ -4,8 +4,8 @@ using Microsoft.Extensions.Logging;
 namespace Aether.AI.Brains.Code;
 
 /// <summary>
-/// 代码大脑注册表：笔记 Id → <see cref="IBrain"/> 工厂。<see cref="RuleScriptingService"/>（Harness.Scripting）
-/// 即时编译 C# 笔记后把工厂注册进来；<see cref="AgentFactory.BuildRuleAgent"/> 按笔记 Id 取工厂得 fresh 实例。
+/// 代码大脑注册表：定义 Id → <see cref="IBrain"/> 工厂。源码编译服务或宿主可注册预编译工厂，
+/// <see cref="CodeBrainFactory"/> 按定义 Id 取得 fresh 实例。
 /// 工厂而非单例——代码大脑可有状态，每次召唤需新实例。
 /// <para>编译失败按 Id 记进 <see cref="LoadErrors"/>，召唤时回兜底提示。</para>
 /// </summary>

@@ -291,7 +291,7 @@ public class ToolApprovalSpikeTests
         Assert.Contains("报单", finalText);
     }
 
-    private sealed class ConstChatClientFactory : IChatClientFactory
+    private sealed class ConstChatClientFactory : Aether.AI.Brains.Abstractions.IChatClientFactory
     {
         private readonly IChatClient _client;
         public ConstChatClientFactory(IChatClient client) => _client = client;

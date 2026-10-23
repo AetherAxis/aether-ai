@@ -20,7 +20,7 @@ public sealed class CodeBrainFactory : IBrainFactory
     public EngineKind Kind => EngineKind.Code;
     public BrainCapabilities Capabilities => BrainCapabilities.Tools | BrainCapabilities.StatefulRun;
 
-    public bool CanCreate(AgentDefinition definition) => definition.GetEffectiveEngine() == EngineKind.Code;
+    public bool CanCreate(AgentDefinition definition) => definition.Engine == EngineKind.Code;
 
     public IBrain Create(AgentDefinition definition)
         => new RunScopedBrainRouter(() => CreateBrain(definition.Id),

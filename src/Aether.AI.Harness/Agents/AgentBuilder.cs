@@ -15,7 +15,6 @@ public sealed class AgentBuilder
     private string _modelId = string.Empty;
     private EngineKind _engine = EngineKind.Llm;
     private RuleProgram? _rules;
-    private bool _isCodeRule;
     private CodeBrainLanguage _codeLanguage = CodeBrainLanguage.CSharp;
     private bool _enableBrainRouting;
     private double? _temperature;
@@ -47,7 +46,6 @@ public sealed class AgentBuilder
     // —— 引擎（大脑；默认 LLM）——
     public AgentBuilder Engine(EngineKind engine) { _engine = engine; return this; }
     public AgentBuilder Rules(RuleProgram rules) { _rules = rules; return this; }
-    public AgentBuilder IsCodeRule(bool isCodeRule = true) { _isCodeRule = isCodeRule; return this; }
     public AgentBuilder CodeLanguage(CodeBrainLanguage language) { _codeLanguage = language; return this; }
     public AgentBuilder EnableBrainRouting(bool enabled = true) { _enableBrainRouting = enabled; return this; }
 
@@ -89,7 +87,6 @@ public sealed class AgentBuilder
         ModelId = _modelId,
         Engine = _engine,
         Rules = _rules,
-        IsCodeRule = _isCodeRule,
         CodeLanguage = _codeLanguage,
         EnableBrainRouting = _enableBrainRouting,
         Temperature = _temperature,

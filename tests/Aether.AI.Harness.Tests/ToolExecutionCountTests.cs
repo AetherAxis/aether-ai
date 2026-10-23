@@ -112,6 +112,36 @@ public class ToolExecutionCountTests
     }
 
     [Fact]
+    public async Task Rejected_approval_does_not_execute_tool()
+    {
+        var client = new ScriptedChatClient();
+        client.Script.Add(new ChatResponseUpdate
+        {
+            Contents = new AIContent[]
+            {
+                new FunctionCallContent("call-reject", "DangerousOp", new Dictionary<string, object?>()),
+            },
+        });
+        client.Script.Add(MakeText("rejected"));
+
+        var calls = 0;
+        var runtime = BuildRuntime(client, "DangerousOp", () => { calls++; return "ok"; },
+            ToolApprovalLevel.Dangerous, requireToolApproval: true, agentId: "reject-agent");
+        var session = runtime.StartSession("reject-agent");
+        ToolApprovalRequest? approval = null;
+        await runtime.RunStreamingAsync(session.SessionId, "go", new StreamHandlers(
+            OnApprovalRequest: (request, _) => { approval = request; return Task.CompletedTask; }));
+
+        Assert.NotNull(approval);
+        Assert.Equal(0, calls);
+
+        var decision = new ToolApprovalDecision(approval!.RequestId, Approved: false, Reason: "no", AlwaysApprove: false);
+        await runtime.RunStreamingAsync(session.SessionId, "go", new StreamHandlers(), decision);
+
+        Assert.Equal(0, calls);
+    }
+
+    [Fact]
     public async Task Repeated_call_across_iterations_executes_twice()
     {
         // 机制 (b)：模型第 1 轮调一次，第 2 轮（已见到结果）再调一次，第 3 轮给文本
@@ -163,7 +193,7 @@ public class ToolExecutionCountTests
         return runtime;
     }
 
-    private sealed class ConstChatClientFactory : IChatClientFactory
+    private sealed class ConstChatClientFactory : Aether.AI.Brains.Abstractions.IChatClientFactory
     {
         private readonly IChatClient _client;
         public ConstChatClientFactory(IChatClient client) => _client = client;

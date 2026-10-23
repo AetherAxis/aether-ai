@@ -1,4 +1,4 @@
-namespace Aether.AI.Harness.FSharp
+namespace Aether.AI.Brains.Code.FSharp
 
 open System.Collections.Generic
 open Aether.AI.Brains.Code

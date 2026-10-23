@@ -13,18 +13,6 @@ public class BrainModelTests
         Assert.Equal(2, (int)EngineKind.Code);
     }
 
-    [Theory]
-    [InlineData(EngineKind.Llm, false, EngineKind.Llm)]
-    [InlineData(EngineKind.Rule, false, EngineKind.Rule)]
-    [InlineData(EngineKind.Rule, true, EngineKind.Code)]
-    [InlineData(EngineKind.Code, false, EngineKind.Code)]
-    public void Legacy_definition_maps_to_three_brain_kinds(
-        EngineKind engine, bool isCodeRule, EngineKind expected)
-    {
-        var definition = new AgentDefinition { Engine = engine, IsCodeRule = isCodeRule };
-        Assert.Equal(expected, definition.GetEffectiveEngine());
-    }
-
     [Fact]
     public void Registry_reports_missing_opt_in_implementation()
     {

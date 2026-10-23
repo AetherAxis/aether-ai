@@ -27,12 +27,6 @@ public sealed class AgentDefinition
     public RuleProgram? Rules { get; init; }
 
     /// <summary>
-    /// 旧配置兼容字段。历史定义中的 <c>Engine=Rule, IsCodeRule=true</c> 按
-    /// <see cref="EngineKind.Code"/> 解释；新定义应直接设置 <see cref="Engine"/>。
-    /// </summary>
-    public bool IsCodeRule { get; init; }
-
-    /// <summary>
     /// 代码大脑语言。仅有效大脑类型为 <see cref="EngineKind.Code"/> 时使用；默认 C#，兼容旧代码笔记。
     /// 该字段不表示是否动态编译，已编译类型与源码编译使用同一语言标识。
     /// </summary>

@@ -292,7 +292,7 @@ public class HarnessRuntimeLifecycleTests
     }
 
     /// <summary>记录每次 Create 的 modelId（观察 agent 缓存重建契约）；client 委托给内部实例。</summary>
-    private sealed class FactorySpy : IChatClientFactory
+    private sealed class FactorySpy : Aether.AI.Brains.Abstractions.IChatClientFactory
     {
         private readonly IChatClient _inner;
         private readonly List<string?> _models = new();

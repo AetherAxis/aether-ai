@@ -4,7 +4,7 @@ using System.Reflection;
 using Aether.AI.Brains.Abstractions;
 using Aether.AI.Brains.Code;
 using Aether.AI.Brains.Code.Compilation;
-using Aether.AI.Harness.FSharp;
+using Aether.AI.Brains.Code.FSharp;
 using FSharp.Compiler.CodeAnalysis;
 using FSharp.Compiler.Diagnostics;
 using Microsoft.FSharp.Control;
@@ -25,7 +25,7 @@ namespace Aether.AI.Brains.Code.Compilation.FSharp;
 /// <c>FsRuleBrainAdapter&lt;'T&gt;</c>（泛型 + new() 约束 → 平台侧 Activator 无参构造可复建）。</item>
 /// </list>
 /// <para>checker 创建昂贵（加载整套 F# 编译器），进程级单例 + 懒加载。编译跑在后台加载线程
-/// （<c>RuleScriptingService.LoadAsync</c>），无 SynchronizationContext，sync-over-async 安全。</para>
+/// （<c>CodeCompilationService.LoadAsync</c>），无 SynchronizationContext，sync-over-async 安全。</para>
 /// </summary>
 public static class FsRuleScriptCompiler
 {
@@ -41,7 +41,7 @@ public static class FsRuleScriptCompiler
     /// <summary>临时编译目录（源码 + dll 落盘走 FCS 文件式 API；编译后即删）。</summary>
     private static readonly string TmpDir = Path.Combine(Path.GetTempPath(), "aether-fs");
 
-    /// <summary>FSharp.Core 路径：契约程序集（Aether.AI.Harness.FSharp）bin 同目录。构造期引用
+    /// <summary>FSharp.Core 路径：契约程序集（Aether.AI.Brains.Code.FSharp）bin 同目录。构造期引用
     /// typeof(<see cref="IFsRuleBrain"/>) 顺带把契约程序集加载进 AppDomain（供引用扫描收录）。</summary>
     private static readonly string FSharpCorePath = Path.Combine(
         Path.GetDirectoryName(typeof(IFsRuleBrain).Assembly.Location)!,
@@ -203,12 +203,24 @@ public static class FsRuleScriptCompiler
     /// 判；bundle 内的 System.* impl 由 ref-pack 同名去重兜底（BuildArgs 的 seen 集合先到先得）。</summary>
     private static IEnumerable<string> AppAssemblyPaths()
     {
-        foreach (var a in AppDomain.CurrentDomain.GetAssemblies())
+        var pending = new Queue<Assembly>(AppDomain.CurrentDomain.GetAssemblies());
+        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        while (pending.Count > 0)
         {
-            if (a.IsDynamic || string.IsNullOrEmpty(a.Location)) continue;
-            if (Path.GetFileNameWithoutExtension(a.Location) == "System.Private.CoreLib") continue;
-            if (IsSharedFrameworkPath(a.Location)) continue;
-            yield return a.Location;
+            var assembly = pending.Dequeue();
+            if (!visited.Add(assembly.FullName ?? assembly.GetName().Name ?? string.Empty)) continue;
+
+            foreach (var reference in assembly.GetReferencedAssemblies())
+            {
+                if (visited.Contains(reference.FullName)) continue;
+                try { pending.Enqueue(Assembly.Load(reference)); }
+                catch { /* optional runtime dependency; FCS reports it if source requires it */ }
+            }
+
+            if (assembly.IsDynamic || string.IsNullOrEmpty(assembly.Location)) continue;
+            if (Path.GetFileNameWithoutExtension(assembly.Location) == "System.Private.CoreLib") continue;
+            if (IsSharedFrameworkPath(assembly.Location)) continue;
+            yield return assembly.Location;
         }
     }
 

@@ -22,15 +22,3 @@ public enum CodeBrainLanguage
     CSharp = 0,
     FSharp = 1,
 }
-
-/// <summary>旧定义到三类大脑模型的唯一兼容映射入口。</summary>
-public static class AgentDefinitionBrainExtensions
-{
-    public static EngineKind GetEffectiveEngine(this AgentDefinition definition)
-    {
-        ArgumentNullException.ThrowIfNull(definition);
-        return definition.Engine == EngineKind.Rule && definition.IsCodeRule
-            ? EngineKind.Code
-            : definition.Engine;
-    }
-}

@@ -22,14 +22,14 @@ public sealed class BrainFactoryRegistry : IBrainFactoryRegistry
     {
         if (TryResolve(definition, out var factory)) return factory!;
         throw new InvalidOperationException(
-            $"No brain implementation is registered for agent '{definition.Id}' ({definition.GetEffectiveEngine()}). " +
+            $"No brain implementation is registered for agent '{definition.Id}' ({definition.Engine}). " +
             "Register the corresponding LLM, Rule, or Code brain package explicitly.");
     }
 
     public bool TryResolve(AgentDefinition definition, out IBrainFactory? factory)
     {
         ArgumentNullException.ThrowIfNull(definition);
-        var kind = definition.GetEffectiveEngine();
+        var kind = definition.Engine;
         lock (_gate)
         {
             factory = _factories.LastOrDefault(candidate => candidate.Kind == kind && candidate.CanCreate(definition));

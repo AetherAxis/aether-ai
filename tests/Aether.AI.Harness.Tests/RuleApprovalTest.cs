@@ -34,8 +34,8 @@ public class RuleApprovalTest
                 },
                 new RuleStep
                 {
-                    Match = new() { MinToolCalls = 1 },
-                    Action = new() { ReplyText = "已删除：{result}" },
+                    Match = new() { OnUserRegex = "删(.+)", MinToolCalls = 1 },
+                    Action = new() { ReplyText = "已删除：{user.1}={result}" },
                 },
             },
         };
@@ -91,7 +91,7 @@ public class RuleApprovalTest
         Console.WriteLine($"SAW_RESULT={sawResult} FINAL_TEXT={finalText}");
         Assert.True(sawResult, "批准后 DeleteFile 应被执行并回填结果");
         Assert.NotEqual("无匹配规则", finalText);
-        Assert.Contains("已删除：deleted:/tmp/scratch.txt", finalText);
+        Assert.Contains("已删除：/tmp/scratch.txt=deleted:/tmp/scratch.txt", finalText);
     }
 
     private static string DeleteFile(string filePath) => $"deleted:{filePath}";

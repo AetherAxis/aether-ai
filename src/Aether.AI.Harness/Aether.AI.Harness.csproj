@@ -10,8 +10,7 @@
     <PackageReference Include="Microsoft.Agents.AI.Harness" />
     <PackageReference Include="Microsoft.Extensions.AI" />
     <PackageReference Include="Microsoft.Extensions.AI.Abstractions" />
-    <!-- ILogger/ILoggerFactory（AgentFactory/ToolRegistry/RuleChatClient 等用）——显式声明，不依赖传递，
-         与 Harness.Scripting 的 10.0.9 基准一致。 -->
+    <!-- ILogger/ILoggerFactory are used directly by Harness services. -->
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
   </ItemGroup>
 

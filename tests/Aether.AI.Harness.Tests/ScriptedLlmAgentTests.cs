@@ -42,7 +42,7 @@ public class ScriptedLlmAgentTests
         Assert.Contains("echo:hello", finalText);
     }
 
-    private sealed class ScriptedClientFactory : IChatClientFactory
+    private sealed class ScriptedClientFactory : Aether.AI.Brains.Abstractions.IChatClientFactory
     {
         public IChatClient Create(string? modelId) => new ScriptedChatClient();
     }
@@ -54,7 +54,7 @@ public class ScriptedLlmAgentTests
 
         public Task<ChatResponse> GetResponseAsync(
             IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default)
-            => throw new NotSupportedException("测试桩仅支持流式（与 RuleChatClient 同约束）");
+            => throw new NotSupportedException("测试桩仅支持流式（与 BrainChatClient 同约束）");
 
         public IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
             IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default)

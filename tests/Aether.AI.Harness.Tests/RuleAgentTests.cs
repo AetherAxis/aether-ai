@@ -1,5 +1,6 @@
 using System.Collections;
 using Aether.AI.Core.Agents;
+using Aether.AI.Brains.Abstractions;
 using Aether.AI.Brains.Rule;
 using Aether.AI.Harness.Agents;
 using Microsoft.Agents.AI;
@@ -9,8 +10,8 @@ namespace Aether.AI.Harness.Tests;
 
 /// <summary>
 /// Rule Agent 1.0 刺探测试：验证「规则大脑代替 LLM、复用 MAF HarnessAgent 生态」的接缝。
-/// 分两类：(1) <see cref="RuleProgramBrain"/> 纯单测——喂 <see cref="RuleContext"/> 断言流出的
-/// <see cref="AIContent"/>；(2) <see cref="RuleChatClient"/> + <c>AsHarnessAgent</c> 端到端——
+/// 分两类：(1) <see cref="RuleProgramBrain"/> 纯单测——喂 <see cref="BrainContext"/> 断言流出的
+/// <see cref="AIContent"/>；(2) <see cref="BrainChatClient"/> + <c>AsHarnessAgent</c> 端到端——
 /// 证明规则 client 驱动 MAF agent 循环（工具执行 → 结果回填 → 终答终止），无 LLM。
 /// </summary>
 public class RuleAgentTests
@@ -33,7 +34,7 @@ public class RuleAgentTests
         };
         var brain = new RuleProgramBrain(program);
 
-        var ctx = new RuleContext { LatestUser = User("查600000"), ToolCallsThisTurn = 0 };
+        var ctx = new BrainContext { LatestUser = User("查600000"), ToolCallsThisTurn = 0 };
         var output = await brain.DecideAsync(ctx, default);
 
         var fc = Assert.Single(output.OfType<FunctionCallContent>());
@@ -57,11 +58,11 @@ public class RuleAgentTests
         var brain = new RuleProgramBrain(program);
 
         // 首次（0 次工具）→ 工具调用
-        var first = await brain.DecideAsync(new RuleContext { ToolCallsThisTurn = 0 }, default);
+        var first = await brain.DecideAsync(new BrainContext { ToolCallsThisTurn = 0 }, default);
         Assert.Single(first.OfType<FunctionCallContent>());
 
         // 再次（1 次工具）→ 终答
-        var second = await brain.DecideAsync(new RuleContext { ToolCallsThisTurn = 1 }, default);
+        var second = await brain.DecideAsync(new BrainContext { ToolCallsThisTurn = 1 }, default);
         var text = Assert.Single(second.OfType<TextContent>());
         Assert.Equal("done", text.Text);
     }
@@ -75,7 +76,7 @@ public class RuleAgentTests
         };
         var brain = new RuleProgramBrain(program);
 
-        var output = await brain.DecideAsync(new RuleContext { LatestUser = User("y") }, default);
+        var output = await brain.DecideAsync(new BrainContext { LatestUser = User("y") }, default);
 
         var text = Assert.Single(output.OfType<TextContent>());
         Assert.Equal("无匹配规则", text.Text);
@@ -91,7 +92,7 @@ public class RuleAgentTests
         };
         var brain = new RuleProgramBrain(program);
 
-        var output = await brain.DecideAsync(new RuleContext { LatestUser = User("y") }, default);
+        var output = await brain.DecideAsync(new BrainContext { LatestUser = User("y") }, default);
 
         Assert.Equal("听不懂", Assert.Single(output.OfType<TextContent>()).Text);
     }
@@ -106,7 +107,7 @@ public class RuleAgentTests
         };
         var brain = new RuleProgramBrain(program);
 
-        var output = await brain.DecideAsync(new RuleContext { ToolCallsThisTurn = 2 }, default);
+        var output = await brain.DecideAsync(new BrainContext { ToolCallsThisTurn = 2 }, default);
 
         Assert.Contains("超限", Assert.Single(output.OfType<TextContent>()).Text);
     }
@@ -125,11 +126,11 @@ public class RuleAgentTests
         var brain = new RuleProgramBrain(program);
 
         var errOut = await brain.DecideAsync(
-            new RuleContext { LatestToolResult = new FunctionResultContent("c1", "ERROR: timeout") }, default);
+            new BrainContext { LatestToolResult = new FunctionResultContent("c1", "ERROR: timeout") }, default);
         Assert.Equal("出错啦", Assert.Single(errOut.OfType<TextContent>()).Text);
 
         var okOut = await brain.DecideAsync(
-            new RuleContext { LatestToolResult = new FunctionResultContent("c2", "200 OK") }, default);
+            new BrainContext { LatestToolResult = new FunctionResultContent("c2", "200 OK") }, default);
         Assert.Equal("ok", Assert.Single(okOut.OfType<TextContent>()).Text);
     }
 
@@ -150,7 +151,7 @@ public class RuleAgentTests
         var brain = new RuleProgramBrain(program);
 
         var output = await brain.DecideAsync(
-            new RuleContext { LatestUser = User("hello"), LatestToolResult = new FunctionResultContent("c", "R") }, default);
+            new BrainContext { LatestUser = User("hello"), LatestToolResult = new FunctionResultContent("c", "R") }, default);
 
         Assert.Equal("你说:hello 词:hello 果:R", Assert.Single(output.OfType<TextContent>()).Text);
     }
@@ -172,7 +173,7 @@ public class RuleAgentTests
         };
         var brain = new RuleProgramBrain(program);
 
-        var first = await brain.DecideAsync(new RuleContext { LatestUser = User("读/tmp/note.txt"), ToolCallsThisTurn = 0 }, default);
+        var first = await brain.DecideAsync(new BrainContext { LatestUser = User("读/tmp/note.txt"), ToolCallsThisTurn = 0 }, default);
         var fc = Assert.Single(first.OfType<FunctionCallContent>());
         Assert.Equal("Read", fc.Name);
         var args = Assert.IsAssignableFrom<IDictionary<string, object?>>(fc.Arguments);
@@ -196,18 +197,18 @@ public class RuleAgentTests
         };
         var brain = new RuleProgramBrain(program);
 
-        var output = await brain.DecideAsync(new RuleContext { LatestUser = User("你是谁"), ToolCallsThisTurn = 0 }, default);
+        var output = await brain.DecideAsync(new BrainContext { LatestUser = User("你是谁"), ToolCallsThisTurn = 0 }, default);
 
         Assert.Empty(output.OfType<FunctionCallContent>()); // 不调工具
         Assert.Equal("听不懂", Assert.Single(output.OfType<TextContent>()).Text); // 走 no-match
     }
 
-    // —— RuleChatClient 端到端刺探（驱动真实 MAF agent 循环，无 LLM）——
+    // —— BrainChatClient 端到端刺探（驱动真实 MAF agent 循环，无 LLM）——
 
     [Fact]
-    public async Task RuleChatClient_direct_emits_tool_call_for_user_message()
+    public async Task BrainChatClient_direct_emits_tool_call_for_user_message()
     {
-        // 绕过 MAF agent，直接喂 history 给 RuleChatClient，隔离 BuildContext 是否正确识别 user 消息。
+        // 绕过 MAF agent，直接喂 history 给 BrainChatClient，隔离 BuildContext 是否正确识别 user 消息。
         var program = new RuleProgram
         {
             Steps = new()
@@ -216,7 +217,7 @@ public class RuleAgentTests
                                Action = new() { Tool = "Query", Args = new() { ["symbol"] = "{user.1}" } } },
             },
         };
-        var client = new RuleChatClient(new RuleProgramBrain(program));
+        var client = new BrainChatClient(new RuleProgramBrain(program));
         var history = new List<ChatMessage> { new(ChatRole.User, "查600000") };
 
         ChatResponseUpdate? update = null;
@@ -227,7 +228,7 @@ public class RuleAgentTests
     }
 
     [Fact]
-    public async Task RuleChatClient_keeps_genuine_user_msg_across_tool_result_in_chain()
+    public async Task BrainChatClient_keeps_genuine_user_msg_across_tool_result_in_chain()
     {
         // 回归守卫：工具结果也是 ChatRole.User（装 FunctionResultContent，无 TextContent）。
         // BuildContext 扫「最后一条 user」必须跳过工具结果消息取到真正用户输入——否则 userText=""
@@ -246,7 +247,7 @@ public class RuleAgentTests
                                Action = new() { ReplyText = "结果：{user.1}" } },
             },
         };
-        var client = new RuleChatClient(new RuleProgramBrain(program));
+        var client = new BrainChatClient(new RuleProgramBrain(program));
 
         // 工具链中段历史：真正 user 输入 → assistant 工具调用 → user 工具结果（FunctionResultContent）。
         var call = new FunctionCallContent("c1", "Echo", new Dictionary<string, object?> { ["text"] = "600000" });
@@ -270,7 +271,7 @@ public class RuleAgentTests
     }
 
     [Fact]
-    public async Task RuleChatClient_drives_agent_loop_tool_then_reply()
+    public async Task BrainChatClient_drives_agent_loop_tool_then_reply()
     {
         // 规则：查(\d+) → 调 Echo 传 {user.1}；调过一次后 → 终答「结果：{result}」。
         var program = new RuleProgram
@@ -291,7 +292,7 @@ public class RuleAgentTests
         };
 
         var echo = AIFunctionFactory.Create((Func<string, string>)Echo);
-        var client = new RuleChatClient(new RuleProgramBrain(program));
+        var client = new BrainChatClient(new RuleProgramBrain(program));
         var options = new HarnessAgentOptions
         {
             Id = "rule-spike",

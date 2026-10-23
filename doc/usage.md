@@ -85,8 +85,6 @@ services.AddFSharpCodeBrains();
 services.AddFSharpBrainCompilation(); // FCS + ref-pack
 ```
 
-旧 `services.AddRuleScripting()` 仍可一次安装两种编译器，但会同时携带 Roslyn 与 FCS，仅用于兼容。
-
 Code brain 生命周期按逻辑 turn 隔离：同一 run 的多次工具调用复用一个实例，不同 session 或下一 turn 使用新实例。作者字段不跨 turn 保留。工具结果通过 `CallId` 恢复原实例；取消和异常不会创建替代实例。
 
 ## Rule 优先 Routing
@@ -103,26 +101,17 @@ aether.AddAgent("mixed", agent => agent
     .Rules(ruleProgram));
 ```
 
-Routing 先执行无副作用匹配：`RuleProgram.Capture`，或安全的首步 `OnUserRegex`。命中后固定由 Rule 处理整轮；未命中才懒解析 LLM，并传递原始会话历史。工具失败、业务拒绝、审批拒绝、取消或代码异常都不会自动改由 LLM 重做。
+Routing 默认关闭，仅在显式设置 `EnableBrainRouting=true` 时启用。它先执行无副作用匹配：`RuleProgram.Capture`，或安全的首步 `OnUserRegex`。命中后固定由 Rule 处理整轮；未命中才懒解析 LLM，并传递原始会话历史。工具失败、业务拒绝、审批拒绝、取消或代码异常都不会自动改由 LLM 重做。
 
-LLM 主动调用 `run_rule` 仍是独立混合模式，与输入 Routing 不同。
+当前 Routing 仍有三项已知限制：多工具结果扫描可能再次处理旧结果并触发 `StateLost`；matcher 只选择单一入口，不组合多个候选；混合分支不会完整保留 LLM sampling、response format 和 provider-specific capabilities。本轮未修改 Routing 核心，启用前需由宿主针对这些限制验收。
 
-## 兼容性
+## 历史数据迁移
 
-| 旧定义 | 新语义 |
-|---|---|
-| `Engine=Llm` | Llm |
-| `Engine=Rule, IsCodeRule=false` | Rule |
-| `Engine=Rule, IsCodeRule=true` | Code |
-| `language` 空或 `csharp` | `CodeLanguage.CSharp` |
-| `language=fsharp` | `CodeLanguage.FSharp` |
-
-旧 `EngineKind` 数值 `0/1` 不变。新代码应使用 `GetEffectiveEngine()` 解释旧字段，不要继续散落判断 `IsCodeRule`。
+`EngineKind.Llm=0`、`Rule=1` 的数值保持不变，`Code=2`。对历史定义执行一次性迁移：将 `Engine=Rule, IsCodeRule=true` 更新为 `Engine=Code`，将其余定义保留原 `Engine`，然后删除 `IsCodeRule` 字段。运行时不读取该旧字段。
 
 ## 能力边界
 
 - 工具池、工具调用/回填、审批、事件、会话和进度由 Harness 统一提供。
 - Rule/Code 不会因为共享 Harness 就理解自然语言 Skills、模型采样或摘要提示。
-- `RuleToolExecutor` 是工具内自包含循环，不自动继承外层每个审批与事件钩子。
 - iOS 等禁止子进程的宿主不要启用文件 Skill 脚本或动态源码编译。
 - 当前仓内未验证真实模型端点、跨进程 MCP、GUI 和移动端；测试使用可控替身。

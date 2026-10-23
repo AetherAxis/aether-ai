@@ -19,18 +19,6 @@ namespace Aether.AI.Brains.Code.Compilation.CSharp;
 /// </summary>
 public static class RuleScriptCompiler
 {
-    private const string LegacyBaseType = "Aether.AI.Harness.Agents.CodeRuleBrain";
-    private const string CurrentBaseType = "Aether.AI.Brains.Code.CodeRuleBrain";
-    private const string LegacyNamespaceImport = "using Aether.AI.Harness.Agents;";
-    private const string CurrentNamespaceImport = "using Aether.AI.Brains.Code;";
-    private const string LegacyShimSource = """
-        namespace Aether.AI.Harness.Agents
-        {
-            [System.Obsolete("Use Aether.AI.Brains.Code.CodeRuleBrain.")]
-            public abstract class CodeRuleBrain : Aether.AI.Brains.Code.CodeRuleBrain { }
-        }
-        """;
-
     // 源码 hash → 已编译程序集（装在可卸载 ALC 内）。
     private static readonly ConcurrentDictionary<string, LoadedAssembly> _cache = new();
 
@@ -80,18 +68,10 @@ public static class RuleScriptCompiler
             .Distinct()
             .ToArray();
 
-        var normalizedSource = source.Replace(LegacyBaseType, CurrentBaseType, StringComparison.Ordinal);
-        var syntaxTrees = new List<SyntaxTree> { CSharpSyntaxTree.ParseText(normalizedSource) };
-        if (source.Contains(LegacyNamespaceImport, StringComparison.Ordinal)
-            && !source.Contains(CurrentNamespaceImport, StringComparison.Ordinal)
-            && !source.Contains(LegacyBaseType, StringComparison.Ordinal))
-        {
-            syntaxTrees.Add(CSharpSyntaxTree.ParseText(LegacyShimSource));
-        }
-
+        var syntaxTree = CSharpSyntaxTree.ParseText(source);
         var compilation = CSharpCompilation.Create(
             "CodeRuleScript_" + System.Guid.NewGuid().ToString("N"),
-            syntaxTrees,
+            new[] { syntaxTree },
             references,
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
 
@@ -126,7 +106,7 @@ public static class RuleScriptCompiler
         catch (ReflectionTypeLoadException ex)
         {
             // 类型加载失败也走「编译失败」路径（TryCompile 契约：失败 out error，不抛异常）——
-            // 否则一条坏笔记的异常会逃逸到调用方，中断整轮 LoadAsync 循环（后续规则不注册、RulesLoaded 不触发）。
+            // 否则一条坏源码的异常会逃逸到调用方，中断整轮 LoadAsync 循环（后续大脑不注册、Loaded 不触发）。
             error = "类型加载失败: " + string.Join("; ", ex.LoaderExceptions.Select(e => e?.Message ?? e!.GetType().Name));
             return false;
         }

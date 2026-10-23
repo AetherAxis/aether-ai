@@ -10,7 +10,7 @@ Microsoft Agent Framework 之上的本地 Agent 运行时。基础大脑只有�
 | `Aether.AI.Abstractions` | MCP 等现有稳定契约 |
 | `Aether.AI.Brains.Abstractions` | `IBrain`、工厂注册表、能力与无副作用匹配契约 |
 | `Aether.AI.Brains.Llm` | OpenAI-compatible 默认模型客户端；显式 opt-in |
-| `Aether.AI.Brains.Rule` | 声明式 `RuleProgram` 求值、注册表与 `run_rule` 工具 |
+| `Aether.AI.Brains.Rule` | 声明式 `RuleProgram` 求值与 Rule 大脑工厂 |
 | `Aether.AI.Brains.Code` | 语言无关协程驱动、代码大脑注册表、按 run 状态隔离 |
 | `Aether.AI.Brains.Code.CSharp` | 已编译 C# 作者层入口；不携带 Roslyn |
 | `Aether.AI.Brains.Code.FSharp` | F# `Step` / `BrainCtx` / 线性大脑作者契约；不携带 FCS |
@@ -21,8 +21,6 @@ Microsoft Agent Framework 之上的本地 Agent 运行时。基础大脑只有�
 | `Aether.AI.Harness` | 通用 MAF 构建、工具/审批、流式事件、会话和进度；不引用具体大脑实现 |
 | `Aether.AI.Hosting` | `AddAetherAI()` 通用 DI、Memory 与 OTel；不引用 OpenAI/Roslyn/FCS |
 | `Aether.AI.Memory* / Mcp / Workflows` | 原有可选设施 |
-
-`Aether.AI.Harness.Scripting` 暂保留为兼容组合入口，`AddRuleScripting()` 同时安装 C# 和 F# 编译插件；新宿主应优先选择语言专用项目。
 
 ## 最小组合
 
@@ -51,14 +49,9 @@ services.AddAetherAI();
 
 显式 Routing 还需 `AddRuleBrains()`、`AddBrainRouting()`，并在定义上设置 `EnableBrainRouting=true`。Rule 匹配与执行分离；Rule 接管后的异常、拒批、取消和工具失败不会切换 LLM。
 
-## 兼容映射
+## 数据迁移
 
-- `Engine=Llm` -> Llm。
-- `Engine=Rule, IsCodeRule=false` -> Rule。
-- `Engine=Rule, IsCodeRule=true` -> Code。
-- 新定义可直接使用 `Engine=Code`，`CodeLanguage` 默认 `CSharp`。
-- `EngineKind.Llm=0`、`Rule=1` 保持不变；`Code=2`。
-- `Aether.AI.Harness.Agents.IChatClientFactory`、`RuleContext`、`IRuleBrain`、`RuleChatClient` 暂保留源码兼容入口。
+`EngineKind.Llm=0`、`Rule=1` 的序列化值保持不变，`Code=2`。历史数据须一次性把 `Engine=Rule, IsCodeRule=true` 更新为 `Engine=Code`，随后删除 `IsCodeRule` 字段；运行时不再提供兼容映射。
 
 ## 状态与执行
 
@@ -73,6 +66,6 @@ dotnet build aether-ai.slnx -c Release
 dotnet test aether-ai.slnx -c Release --no-build
 ```
 
-当前架构在 .NET SDK 10.0.301 下完成 Release 验收：25 个项目构建为 0 警告、0 错误，三个测试程序集共 180 项全部通过。
+当前架构在 .NET SDK 10.0.301 下完成 Release 验收：24 个项目构建为 0 警告、0 错误，三个测试程序集共 179 项全部通过。
 
-`tests/Consumers` 中的三个最小消费项目随 solution 持续构建，并在 `ResolveReferences` 后校验实际依赖闭包：Rule-only 和预编译 Code-only 禁止 OpenAI、Roslyn、FCS；C# 动态编译允许 Roslyn，但禁止 OpenAI 与 FCS。真实模型端点、外部 MCP、GUI 与移动端仍需宿主侧验收。
+`tests/Consumers` 中的三个最小消费项目随 solution 持续构建，并在 `ResolveReferences` 后校验实际依赖闭包：Rule-only 和预编译 Code-only 禁止 OpenAI、Roslyn、FCS；C# 动态编译允许 Roslyn，但禁止 OpenAI 与 FCS。CI 还会直接运行三个 Consumer，分别验证 Rule 工具执行、预编译 Code 工具执行和动态 C# 编译/注册/执行。真实模型端点、外部 MCP、GUI 与移动端仍需宿主侧验收。

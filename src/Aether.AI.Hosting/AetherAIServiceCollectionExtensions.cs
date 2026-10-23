@@ -91,7 +91,7 @@ public static class AetherAIServiceCollectionExtensions
                     new SlidingWindowChatReducer(definition.MaxHistory), logger),
                 // 摘要压缩：保留最近 MaxHistory 条，更早的由 LLM 摘要（threshold=MaxHistory → 达 2× 才触发摘要，避免每轮摘要）。
                 // 非 LLM 大脑不执行摘要模型调用，回退 Full。
-                AgentMemoryMode.Summarize when definition.GetEffectiveEngine() == EngineKind.Llm && chatClientFactory is not null
+                AgentMemoryMode.Summarize when definition.Engine == EngineKind.Llm && chatClientFactory is not null
                     => new RestoringChatHistoryProvider(store, map,
                         new SummarizingChatReducer(chatClientFactory.Create(definition.ModelId),
                             definition.MaxHistory, definition.MaxHistory)
@@ -162,10 +162,7 @@ public static class AetherAIServiceCollectionExtensions
 
     private static Aether.AI.Brains.Abstractions.IChatClientFactory? ResolveChatClientFactory(
         IServiceProvider services)
-#pragma warning disable CS0618 // Compatibility bridge for hosts registered against the former Harness service key.
-        => services.GetService<Aether.AI.Brains.Abstractions.IChatClientFactory>()
-            ?? services.GetService<Aether.AI.Harness.Agents.IChatClientFactory>();
-#pragma warning restore CS0618
+        => services.GetService<Aether.AI.Brains.Abstractions.IChatClientFactory>();
 
     private sealed class MissingChatClientFactory : Aether.AI.Brains.Abstractions.IChatClientFactory
     {

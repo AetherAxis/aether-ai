@@ -63,6 +63,31 @@ public class RunScopedBrainRouterTests
     }
 
     [Fact]
+    public async Task Evict_session_cancels_pending_code_brain_and_runs_finally()
+    {
+        var cleanup = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var router = new RunScopedBrainRouter(() => new CleanupBrain(cleanup));
+        Assert.Single((await router.DecideAsync(Context("session-cleanup"), default)).OfType<FunctionCallContent>());
+
+        router.EvictSession("session-cleanup");
+
+        await cleanup.Task.WaitAsync(TimeSpan.FromSeconds(5));
+    }
+
+    [Fact]
+    public async Task Cancellation_cancels_pending_code_brain_and_runs_finally()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var cleanup = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var router = new RunScopedBrainRouter(() => new CleanupBrain(cleanup));
+        Assert.Single((await router.DecideAsync(Context("session-cancel"), cancellation.Token)).OfType<FunctionCallContent>());
+
+        cancellation.Cancel();
+
+        await cleanup.Task.WaitAsync(TimeSpan.FromSeconds(5));
+    }
+
+    [Fact]
     public async Task Repeated_call_id_is_rejected_after_atomic_resume()
     {
         var router = new RunScopedBrainRouter(() => new TwoStepBrain(1));
@@ -86,6 +111,21 @@ public class RunScopedBrainRouterTests
         LatestToolResult = callId is null ? null : new FunctionResultContent(callId, result),
         ToolCallsThisTurn = calls,
     };
+
+    private sealed class CleanupBrain(TaskCompletionSource cleanup) : CodeRuleBrain
+    {
+        protected override async Task<string> RunAsync()
+        {
+            try
+            {
+                return await Call("Echo");
+            }
+            finally
+            {
+                cleanup.TrySetResult();
+            }
+        }
+    }
 
     private sealed class TwoStepBrain(int instance) : IBrain
     {
