@@ -194,6 +194,29 @@ services.AddAetherAI().AddSystemTools();                            // 全量 15
 [`aether-ai-integrations/README.md`](../../aether-ai-integrations/README.md)。可用规则大脑调用它们
 自验：`dotnet run --project aether-ai-integrations/tests/Consumers/Aether.SystemTools.AI.Consumer`。
 
+## 会话持久化（可选）
+
+默认会话只活在进程内。要跨重启续聊，注册一个 `IAgentSessionStore`：
+
+```csharp
+services.AddSingleton<Aether.AI.Harness.Sessions.IAgentSessionStore, MySqliteSessionStore>();
+// 或 aether.Configure(o => o.AgentSessionStore = new InMemoryAgentSessionStore());
+
+var session = runtime.StartSession("assistant", savedConversationId); // 按已知 id 恢复
+```
+
+- 会话在创建时与每轮结束后序列化落盘；恢复失败（旧格式、定义改过）按新建处理并清掉坏记录。
+- 删除会话（`EvictSession`）与重建框架会话（`RebuildSessionFramework`）会同时删除落盘状态，
+  不会在下次启动「复活」已删会话。
+- `MafAgentSessionStore` 把同一份存储暴露成 MAF 的 `AgentSessionStore`，供 MAF 生态读写。
+- 落盘失败只降级为「下次重启续不上」，不影响本轮回答。
+
+## Agent 的两种取用方式
+
+`AddAgent(...)` 同时把定义注册进 DI，并以 agent id 为键注册构建好的 `AIAgent`：
+`provider.GetRequiredKeyedService<AIAgent>("my-agent")`。这是 MAF 生态（Hosting/DevUI/AGUI/A2A）
+的取名约定，与运行路径共用同一份缓存，不会重复构建。
+
 ## Rule 优先 Routing
 
 ```csharp

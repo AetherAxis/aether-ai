@@ -41,6 +41,15 @@ public sealed class AetherAIOptions
     /// </summary>
     public string? BrowserProfileDir { get; set; }
 
+    /// <summary>
+    /// 框架会话持久化端口（可选）。默认 <c>null</c> = 会话只活在进程内。
+    /// 配置后每轮结束按 <c>JsonElement</c> 落盘，重启可续用同一会话；宿主也可直接在 DI 里注册
+    /// <see cref="Aether.AI.Harness.Sessions.IAgentSessionStore"/>（DI 注册优先）。
+    /// 现成实现：<see cref="Aether.AI.Harness.Sessions.InMemoryAgentSessionStore"/>（进程内）；
+    /// <see cref="Aether.AI.Harness.Sessions.MafAgentSessionStore"/> 供 MAF 生态读写同一份会话。
+    /// </summary>
+    public Aether.AI.Harness.Sessions.IAgentSessionStore? AgentSessionStore { get; set; }
+
     /// <summary>OpenTelemetry 导出配置。配了任一项才启用 OTel SDK（接 Aether.AI.Harness + MAF 的 Activity 源）。</summary>
     public OpenTelemetryOptions OpenTelemetry { get; set; } = new();
 

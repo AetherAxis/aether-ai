@@ -26,6 +26,23 @@ public sealed class SessionManager
         return session;
     }
 
+    /// <summary>
+    /// 取或建指定 id 的会话——宿主持久化了 conversationId 时用它「续聊」（配合
+    /// <see cref="IAgentSessionStore"/> 恢复框架会话状态）。已存在则原样返回，不重置。
+    /// </summary>
+    public AgentSession GetOrAdd(Guid sessionId, string agentId, string agentName)
+    {
+        if (_sessions.TryGetValue(sessionId, out var existing)) return existing;
+        var created = new AgentSession
+        {
+            SessionId = sessionId,
+            AgentId = agentId,
+            AgentName = agentName,
+            State = SessionState.Created,
+        };
+        return _sessions.GetOrAdd(sessionId, created);
+    }
+
     /// <summary>Retrieves a session by id, or <c>null</c> if not found.</summary>
     public AgentSession? Get(Guid sessionId)
         => _sessions.TryGetValue(sessionId, out var session) ? session : null;

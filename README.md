@@ -42,6 +42,9 @@ AgentDefinition ──► IBrainFactoryRegistry ──► IBrainFactory.CreateCh
 - **流式与非流式同源**：`BrainChatClient` 与路由客户端都实现了 `GetResponseAsync`，`HarnessRuntime.RunAsync` 对规则/代码大脑同样可用。
 - **未注册即报错，配置无效即告警**：`AgentDefinitionValidation` 拒绝「非 LLM 引擎 + 显式路由 / 后台子 agent」这类会改变语义的组合；对「规则 agent 上设置了温度、模型、长期记忆」等不会生效的配置输出一次构建期告警，不再静默忽略。
 - **兼容路径**：宿主只注册 `IChatClientFactory`（未调用 `AddLlmBrains`）时，LLM 定义仍走原路径；一旦调用 `AddLlmBrains()`，LLM 就与 Rule/Code 使用同一注册表。
+- **接缝选点**：大脑适配成 `IChatClient` 而不是继承 `AIAgent`——工具循环、审批与历史都在 chat client 层，接在这里才能让三类大脑共用同一条 MAF 执行链路。取舍与代价见 [`doc/brain-seam.md`](doc/brain-seam.md#接缝为什么在-ichatclient而不是-aiagent-子类)。
+- **会话可持久化**：可选 `IAgentSessionStore`（默认不启用）。配置后每轮落盘，重启用 `StartSession(agentId, sessionId)` 续聊；`MafAgentSessionStore` 与 MAF 生态共用同一份存储。
+- **按名字取 agent**：`AddAgent` 同时以 id 为键注册 `AIAgent`，MAF 生态按名取用。
 - **规则后端可替换**：同一 `EngineKind.Rule` 下可有多个后端——内置 `program`（自研声明式）、`rulesEngine`（Microsoft RulesEngine）、`nRules`（NRules），三者都只是「如何求值规则」的适配器。只引用一个时零配置；引用多个时用 `AgentDefinition.BrainBackend` 显式选择，歧义报错而非按注册顺序取胜。后端只替换「如何求值规则」，工具回填与循环不变。
 
 新增第四类大脑只需：实现 `IBrainFactory`（或 `IContentBrainFactory` + `IBrain`）→ 声明能力集 → 在一个 `AddXxxBrains()` 扩展里 `TryAddEnumerable` 注册；Harness、Hosting、路由代码都不需要改。详见 [`doc/brain-seam.md`](doc/brain-seam.md)。
@@ -90,7 +93,7 @@ dotnet build aether-ai.slnx -c Release
 dotnet test aether-ai.slnx -c Release --no-build
 ```
 
-当前架构在 .NET SDK 10.0.301 下完成 Release 验收：28 个项目编译 0 警告、0 错误（全量重编时 NuGet 审计会对 OTel 1.12.0 的既有 pin 报 NU1902/NU1903，与代码无关），四个测试程序集共 221 项全部通过（其中 42 项覆盖统一大脑接缝、非流式路径、多步路由链、定义校验、规则后端选择与 `rulesEngine` / `nRules` 适配器）。
+当前架构在 .NET SDK 10.0.301 下完成 Release 验收：28 个项目编译 0 警告、0 错误（全量重编时 NuGet 审计会对 OTel 1.12.0 的既有 pin 报 NU1902/NU1903，与代码无关），四个测试程序集共 233 项全部通过（覆盖统一大脑接缝、非流式路径、多步路由链、定义校验、规则后端选择、`rulesEngine` / `nRules` 适配器、会话持久化与轻量路径配置一致性）。
 
 `tests/Consumers` 中的四个最小消费项目随 solution 持续构建（`BrainMatrix` 在一个宿主里同时注册 program / rulesEngine / nRules / Code / LLM 并逐个实跑，其中 LLM 用脚本化替身，本机无 key），并在 `ResolveReferences` 后校验实际依赖闭包：Rule-only 和预编译 Code-only 禁止 OpenAI、Roslyn、FCS；C# 动态编译允许 Roslyn，但禁止 OpenAI 与 FCS。CI 还会直接运行四个 Consumer，分别验证 Rule 工具执行、预编译 Code 工具执行、动态 C# 编译/注册/执行、同一宿主内五种大脑实现的逐个实跑。真实模型端点、外部 MCP、GUI 与移动端仍需宿主侧验收。
 

@@ -134,7 +134,11 @@ public static class AetherAIServiceCollectionExtensions
                 sp.GetRequiredService<AgentFactory>(),
                 sp.GetRequiredService<SessionManager>(),
                 sp.GetService<SessionConversationMap>(),
-                sp.GetService<IRunProgressSink>());
+                sp.GetService<IRunProgressSink>(),
+                // 会话持久化：宿主在 DI 里注册 IAgentSessionStore，或经 AetherAIOptions.AgentSessionStore 指定。
+                // 两者都没有 = 只活在进程内（默认，行为与之前一致）。
+                sp.GetService<Aether.AI.Harness.Sessions.IAgentSessionStore>()
+                    ?? sp.GetRequiredService<AetherAIOptions>().AgentSessionStore);
             // Register every agent definition contributed via the builder.
             foreach (var definition in sp.GetServices<AgentDefinition>())
             {
@@ -153,12 +157,6 @@ public static class AetherAIServiceCollectionExtensions
 
         // 手机远程控制回复摘要（LLM，agent 跑完把 fullText 压成概览发回手机；失败退化为截断全量）
         services.AddSingleton<IConversationSummaryService, ConversationSummaryService>();
-
-        // 应用内 trace 收集器（ActivityListener 收集最近 50 条 agent.run，供 trace 查看页展示）。
-        services.AddSingleton<Aether.AI.Harness.Telemetry.TraceCollector>();
-
-        // 聊天页 LLM 选择器 holder（agent 与 LLM 解耦：ModelId 为空时用此值）
-        services.AddSingleton<Aether.AI.Harness.SelectedLlmHolder>();
 
         return new AetherAIBuilder(services);
     }

@@ -36,9 +36,7 @@ public sealed class AetherAIBuilder
     {
         var builder = new AgentBuilder(id);
         configure(builder);
-        var definition = builder.Build();
-        _services.AddSingleton(definition);
-        return this;
+        return AddAgent(builder.Build());
     }
 
     /// <summary>Registers an agent definition built with <see cref="AgentBuilder"/> (auto-generated id).</summary>
@@ -48,7 +46,14 @@ public sealed class AetherAIBuilder
     /// <summary>Registers an agent definition directly.</summary>
     public AetherAIBuilder AddAgent(AgentDefinition definition)
     {
+        ArgumentNullException.ThrowIfNull(definition);
         _services.AddSingleton(definition);
+        // 同时以 agent id 为键注册构建好的 AIAgent——MAF 生态（Hosting/DevUI/AGUI/A2A）按名字取 agent
+        // 就是这个约定。只用 M.E.DI 的键控注册，不依赖尚未公开发布的 Microsoft.Agents.AI.Hosting 包。
+        // 延迟到首次解析才构建，保持「注册期不解析模型」的既有语义。
+        _services.AddKeyedSingleton<Microsoft.Agents.AI.AIAgent>(
+            definition.Id,
+            (sp, _) => sp.GetRequiredService<Aether.AI.Harness.HarnessRuntime>().GetOrCreateAgent(definition.Id));
         return this;
     }
 

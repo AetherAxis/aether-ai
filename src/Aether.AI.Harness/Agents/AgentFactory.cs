@@ -306,8 +306,8 @@ public sealed class AgentFactory
             // 模式：MAF 1.22 自定义模式（4 档 Plan/Manual/AutoEdit/Auto 升为真 AgentMode——模型感知档位、
             // 每档独立指令；取代旧「MAF 只存 plan/execute + VM 层凑子档」的绕行）。目录见 AetherAgentModeCatalog，
             // 名字单一来源在 Core AgentModes（Mvvm/手机/测试同名引用）。mode_get/mode_set 工具原生禁用
-            //（LLM 看不到但状态管理 + 指令注入保持；切档由宿主 SetModeAsync 驱动——取代旧 ToolFilteringChatClient
-            // 包装，那版把工具名记反从未生效）。审批门控仍在宿主 VM 层逐工具硬门控，不依赖指令。
+            //（LLM 看不到但状态管理 + 指令注入保持；切档由宿主 SetModeAsync 驱动）。审批门控仍在宿主 VM 层
+            // 逐工具硬门控，不依赖指令。
             AgentModeProviderOptions = definition.EnableAgentModeProvider
                 ? new AgentModeProviderOptions
                 {
@@ -322,46 +322,52 @@ public sealed class AgentFactory
             FileMemoryStore = fileMemoryEnabled
                 ? new FileSystemAgentFileStore(Path.Combine(FileMemoryRoot!, definition.Id))
                 : null,
+            // skills provider 自建注入（见 BuildSkillsProvider）：聊天页无审批 UI，
+            // 必须关掉 load/read/run 审批，否则 run_skill_script 被默认审批挡住、模型只 load 不执行。
+            // 内部同名 provider 一并关掉，避免双重。
+            DisableAgentSkillsProvider = true,
+            // 长期记忆 / 后台 agent / skills 三条 NL 上下文 provider 由 BuildContextProviders 统一组装，
+            // 与 ChatClientAgent 路径共用——否则 UseChatClientAgent 分支会静默丢配置。
+            AIContextProviders = BuildContextProviders(definition),
         };
-
-        // skills provider 自建注入（见 ConfigureSkillsProvider）：聊天页无审批 UI，
-        // 必须关掉 load/read/run 审批，否则 run_skill_script 被默认审批挡住、模型只 load 不执行。
-        ConfigureSkillsProvider(options);
-
-        // 长期记忆 provider：EnableLongTermMemory 时由宿主工厂构造 MemoryContextProvider 注入。
-        // 与 skills provider 累加（ConfigureSkillsProvider 可能已设置 AIContextProviders）。
-        var memoryProvider = _memoryContextProviderFactory?.Invoke(definition);
-        if (memoryProvider is not null) AddContextProvider(options, memoryProvider);
-
-        // 后台 Agent（orchestrator 分派子任务）：BackgroundAgents 非空时由宿主工厂把各名字
-        // 解析成 AIAgent 构建 BackgroundAgentsProvider 注入——让本 agent 动态并发委派子任务并收结果。
-        // NOTE: BackgroundAgentsProvider 是 MAF 的 AIAgent（非 IChatClient）级 AIContextProvider，
-        // 其 background_agents_* 工具在 HarnessAgent 运行时由 provider 注册，无需手动挂进 ToolRegistry。
-        if (definition.BackgroundAgents is { Count: > 0 } && _backgroundAgentsFactory is not null)
-        {
-            var subAgents = _backgroundAgentsFactory.Invoke(definition);
-            if (subAgents is { Count: > 0 })
-                AddContextProvider(options, new BackgroundAgentsProvider(subAgents));
-        }
-
-        // mode_get/mode_set 工具的禁用已上移到 HarnessAgentOptions.AgentModeProviderOptions
-        // （MAF 1.22 原生 DisableModeGetTool/SetTool——见上 options 构造处注释），
-        // 不再需要 ToolFilteringChatClient 包装（旧版名字记反从未生效，见该类注释）。
 
         return client.AsHarnessAgent(options, _loggerFactory);
     }
 
-    /// <summary>把 context provider 累加进 <c>options.AIContextProviders</c>（null 则新建；保序，可多次调用）。</summary>
-    private static void AddContextProvider(HarnessAgentOptions options, AIContextProvider provider)
+    /// <summary>
+    /// 组装自然语言上下文 provider：skills / 长期记忆 / 后台 agent。
+    /// <para>两条 LLM 路径（<see cref="HarnessAgent"/> 与 <see cref="ChatClientAgent"/>）共用同一份。
+    /// 此前只有 Harness 路径接线，<c>UseChatClientAgent=true</c> 时长期记忆、skills、后台 agent
+    /// 全部静默失效。二者都认 <c>AIContextProviders</c>，没有理由分叉。</para>
+    /// <para>无 provider 时返回 <c>null</c>（不回写空列表）。</para>
+    /// </summary>
+    private List<AIContextProvider>? BuildContextProviders(AgentDefinition definition)
     {
-        var combined = options.AIContextProviders is null
-            ? new List<AIContextProvider>()
-            : new List<AIContextProvider>(options.AIContextProviders);
-        combined.Add(provider);
-        options.AIContextProviders = combined;
+        var providers = new List<AIContextProvider>();
+
+        if (BuildSkillsProvider() is { } skills)
+            providers.Add(skills);
+
+        // 长期记忆 provider：EnableLongTermMemory 时由宿主工厂构造 MemoryContextProvider 注入。
+        if (_memoryContextProviderFactory?.Invoke(definition) is { } memoryProvider)
+            providers.Add(memoryProvider);
+
+        // 后台 Agent（orchestrator 分派子任务）：BackgroundAgents 非空时由宿主工厂把各名字
+        // 解析成 AIAgent 构建 BackgroundAgentsProvider 注入——让本 agent 动态并发委派子任务并收结果。
+        // NOTE: BackgroundAgentsProvider 是 MAF 的 AIAgent（非 IChatClient）级 AIContextProvider，
+        // 其 background_agents_* 工具在运行时由 provider 注册，无需手动挂进 ToolRegistry。
+        if (definition.BackgroundAgents is { Count: > 0 } && _backgroundAgentsFactory is not null)
+        {
+            var subAgents = _backgroundAgentsFactory.Invoke(definition);
+            if (subAgents is { Count: > 0 })
+                providers.Add(new BackgroundAgentsProvider(subAgents));
+        }
+
+        return providers.Count == 0 ? null : providers;
     }
 
-    private void ConfigureSkillsProvider(HarnessAgentOptions options)
+    /// <summary>按配置构建 skills provider；无技能可用时返回 <c>null</c>。</summary>
+    private AgentSkillsProvider? BuildSkillsProvider()
     {
         // skill 全量按需加载（镜像 Claude Code / knowledge object 理念）：所有 skill 索引常驻
         // 每轮上下文，agent 运行时自己 load_skill 取正文（按需付费）。无 per-agent 白名单——
@@ -372,35 +378,29 @@ public sealed class AgentFactory
         //   每 RefreshInterval 至多一次，并发串行化）；30s TTL 保「资料库改技能近实时生效」
         //   （旧裸构造每次 provider 拉索引都重扫目录）。
         // ②DeduplicatingAgentSkillsSource——同名 skill 去重防护（用户复制技能文件夹场景）。
-        AgentSkillsProvider provider;
         if (!string.IsNullOrEmpty(SkillsDirectory))
         {
-            provider = new AgentSkillsProviderBuilder()
+            return new AgentSkillsProviderBuilder()
                 .UseLoggerFactory(_loggerFactory ?? Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance)
                 .UseFileSkill(SkillsDirectory, options: null, _skillScriptRunner)
                 .UseOptions(DisableSkillApprovals)
                 .UseCachingOptions(c => c.RefreshInterval = TimeSpan.FromSeconds(30))
                 .Build();
         }
-        else
-        {
-            var skills = _skillRegistry.GetAll();
-            if (skills.Count == 0) { options.DisableAgentSkillsProvider = true; return; }
 
-            var agentSkills = skills
-                .Select(s => (AgentSkill)new AgentInlineSkill(
-                    new AgentSkillFrontmatter(s.Name, s.Description, ""), s.Content, null, null))
-                .ToArray();
-            // 内存源无 IO——builder 默认缓存恒命中零成本，无需 TTL 配置。
-            provider = new AgentSkillsProviderBuilder()
-                .UseLoggerFactory(_loggerFactory ?? Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance)
-                .UseSkills(agentSkills)
-                .UseOptions(DisableSkillApprovals)
-                .Build();
-        }
+        var skills = _skillRegistry.GetAll();
+        if (skills.Count == 0) return null;
 
-        options.DisableAgentSkillsProvider = true; // 关内部默认 provider，避免双重 + 避免其默认审批
-        options.AIContextProviders = new List<AIContextProvider> { provider };
+        var agentSkills = skills
+            .Select(s => (AgentSkill)new AgentInlineSkill(
+                new AgentSkillFrontmatter(s.Name, s.Description, ""), s.Content, null, null))
+            .ToArray();
+        // 内存源无 IO——builder 默认缓存恒命中零成本，无需 TTL 配置。
+        return new AgentSkillsProviderBuilder()
+            .UseLoggerFactory(_loggerFactory ?? Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance)
+            .UseSkills(agentSkills)
+            .UseOptions(DisableSkillApprovals)
+            .Build();
     }
 
     /// <summary>skill 工具审批全关（聊天页无审批 UI，MAF 默认审批会挡住 run_skill_script——模型只 load 不执行）。</summary>
@@ -411,34 +411,54 @@ public sealed class AgentFactory
         o.DisableRunSkillScriptApproval = true;
     }
 
+    /// <summary>
+    /// 轻量 <see cref="ChatClientAgent"/> 路径（<see cref="UseChatClientAgent"/>=true）：不叠 HarnessAgent
+    /// 的中间件与注入式 provider，但**不意味着丢配置**——历史 provider、skills、长期记忆、后台 agent
+    /// 与主路径共用同一套接线。只有 HarnessAgent 独有的开关（todo / agent-mode / 文件记忆 / web search /
+    /// OTel / compaction）在此路径下无法生效，由 <see cref="WarnChatClientAgentFeatureGaps"/> 逐条告警。
+    /// </summary>
     private AIAgent BuildChatClientAgent(
         AgentDefinition definition,
         IList<AITool> tools,
         ChatHistoryProvider? historyProvider,
         IChatClient client)
     {
-        // When no custom history provider is needed (Full), use the lightweight
-        // ctor which defaults to InMemoryChatHistoryProvider. Otherwise wire the
-        // provider through ChatClientAgentOptions.
-        if (historyProvider is null)
-        {
-            return new ChatClientAgent(
-                client,
-                instructions: definition.Instructions,
-                name: definition.Name,
-                description: $"Aether.AI agent '{definition.Id}'.",
-                tools: tools,
-                loggerFactory: _loggerFactory);
-        }
+        WarnChatClientAgentFeatureGaps(definition);
 
         var agentOptions = new ChatClientAgentOptions
         {
+            Id = definition.Id,
             Name = definition.Name,
             Description = $"Aether.AI agent '{definition.Id}'.",
             ChatOptions = BuildChatOptions(definition, tools, BrainCapabilitiesDefaults.Llm),
             ChatHistoryProvider = historyProvider,
+            AIContextProviders = BuildContextProviders(definition),
         };
         return new ChatClientAgent(client, agentOptions, _loggerFactory);
+    }
+
+    /// <summary>
+    /// <c>UseChatClientAgent=true</c> 时逐条告警「这个定义要求的能力在该路径下不生效」——
+    /// 与 <see cref="AgentDefinitionValidation"/> 同一原则：配置无效就报出来，不静默忽略。
+    /// </summary>
+    private void WarnChatClientAgentFeatureGaps(AgentDefinition definition)
+    {
+        var logger = _loggerFactory?.CreateLogger<AgentFactory>();
+        if (logger is null) return;
+
+        List<string>? gaps = null;
+        if (definition.EnableTodoProvider) (gaps ??= new()).Add(nameof(definition.EnableTodoProvider));
+        if (definition.EnableAgentModeProvider) (gaps ??= new()).Add(nameof(definition.EnableAgentModeProvider));
+        if (definition.EnableFileMemory) (gaps ??= new()).Add(nameof(definition.EnableFileMemory));
+        if (definition.EnableWebSearch) (gaps ??= new()).Add(nameof(definition.EnableWebSearch));
+        if (definition.EnableOpenTelemetry) (gaps ??= new()).Add(nameof(definition.EnableOpenTelemetry));
+
+        if (gaps is not null)
+        {
+            logger.LogWarning(
+                "Agent '{AgentId}' uses UseChatClientAgent=true; HarnessAgent-only settings are ignored: {Settings}.",
+                definition.Id, string.Join(", ", gaps));
+        }
     }
 
     /// <summary>解析工具审批等级：专家 ToolApprovals 覆盖优先，否则取 ToolRegistry 声明等级。</summary>

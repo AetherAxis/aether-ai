@@ -111,6 +111,29 @@ public class AddAetherAICompositionTests
     }
 
     [Fact]
+    public void Agents_are_also_registered_as_keyed_AIAgent_for_maf_ecosystem()
+    {
+        // MAF 生态（Hosting/DevUI/AGUI/A2A）按「名字 → AIAgent」取 agent。AddAgent 除定义外
+        // 还要注册键控 AIAgent——否则平台层跑得通，生态侧一个 agent 也拿不到。
+        var services = new ServiceCollection();
+        services.AddRuleBrains();
+        var builder = services.AddAetherAI();
+        builder.AddAgent("keyed", agent => agent
+            .Name("keyed")
+            .Engine(EngineKind.Rule)
+            .Rules(new RuleProgram { Steps = new() { new RuleStep { Action = new() { ReplyText = "ok" } } } }));
+
+        using var provider = services.BuildServiceProvider();
+
+        var first = provider.GetRequiredKeyedService<Microsoft.Agents.AI.AIAgent>("keyed");
+        var second = provider.GetRequiredKeyedService<Microsoft.Agents.AI.AIAgent>("keyed");
+
+        Assert.Equal("keyed", first.Id);
+        // 与运行路径共用缓存：第二次解析复用同一实例，不重复构建。
+        Assert.Same(first, second);
+    }
+
+    [Fact]
     public async Task AddTool_delegate_is_executed_by_code_agent()
     {
         var executions = 0;

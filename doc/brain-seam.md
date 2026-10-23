@@ -144,6 +144,22 @@ public sealed class QueryRule : Rule
 **不要照搬后端的全部能力**：只保留与 `IBrain` 契约兼容的子集（每步一个工具调用或一个终答），
 并在文档中写清丢失的语义。
 
+## 接缝为什么在 `IChatClient`，而不是 `AIAgent` 子类
+
+MAF 官方样例（`samples/02-agents/AgentProviders/custom/Agent_With_CustomImplementation`）演示过
+「完全不用 AI 的 agent」——继承 `AIAgent`，实现 5 个 abstract 成员。本仓**故意不走这条路**：
+
+- 工具循环不在 `AIAgent` 层。MAF 的 `FunctionCall → 执行 → 回填 → 再调用` 循环由 chat client 层的
+  `FunctionInvokingChatClient` 承担，审批是 `ApprovalRequiredAIFunction` + `ToolApprovalAgent`。
+- 直接子类化 `AIAgent` 就得自己重写这条循环、审批绑定和历史 provider——恰好是规则/代码大脑最不需要
+  重造的部分，也让「三类大脑共用同一条执行链路」这个前提失效。
+- 接在 `IChatClient` 上，`BrainChatClient` 只在每个模型步产出一条 `AIContent`，工具执行、回填、循环、
+  审批、流式事件全部仍归 MAF。确定性大脑因此不需要、也不拥有执行循环。
+
+代价要认：`IChatClient` 表达不了 `AIAgent` 才有语义——自有 run 生命周期、session 状态机、token 级
+流式、usage 统计。需要这些语义的「大脑」（例如 future 的 workflow-as-brain）应新增 `AIAgent` 级接缝，
+而不是把 `IBrain` 撑大。
+
 ## 组合策略（Routing）
 
 `Aether.AI.Brains.Routing` 是**显式组合**，不是第四类大脑：它先做无副作用的入口匹配，命中后把整轮固定

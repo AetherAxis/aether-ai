@@ -48,13 +48,18 @@ public sealed class HarnessRuntime
     private readonly ConditionalWeakTable<FrameworkAgentSession, WorkflowSessionScope> _workflowSessionScopes = new();
     private readonly IRunProgressSink? _progressSink;
 
-    public HarnessRuntime(AgentFactory factory, SessionManager sessions,
-        SessionConversationMap? sessionConversationMap = null, IRunProgressSink? progressSink = null)
+    public HarnessRuntime(
+        AgentFactory factory,
+        SessionManager sessions,
+        SessionConversationMap? sessionConversationMap = null,
+        IRunProgressSink? progressSink = null,
+        Aether.AI.Harness.Sessions.IAgentSessionStore? agentSessionStore = null)
     {
         _sessionConversationMap = sessionConversationMap ?? new SessionConversationMap();
         _registry = new AgentRuntimeRegistry(
             factory ?? throw new ArgumentNullException(nameof(factory)),
-            _sessionConversationMap);
+            _sessionConversationMap,
+            agentSessionStore);
         _sessions = sessions ?? throw new ArgumentNullException(nameof(sessions));
         _progressSink = progressSink;
     }
@@ -76,6 +81,13 @@ public sealed class HarnessRuntime
     public bool HasAgent(string agentId) => _registry.Has(agentId);
 
     /// <summary>
+    /// 取（或首次构建并缓存）某 agent 的 <see cref="AIAgent"/> 实例——宿主/MAF 生态按名字取 agent 时用。
+    /// 与运行路径共用同一份缓存，不会重复构建。
+    /// </summary>
+    public AIAgent GetOrCreateAgent(string agentId)
+        => _registry.GetOrCreateAgent(_registry.Resolve(agentId));
+
+    /// <summary>
     /// 使已注册 agent 的缓存失效：移除其定义与已构建的 agent 实例，下次运行时重建。
     /// 用于自定义 Agent 被编辑后丢弃旧配置。会话线程由调用方（runner）丢弃并新建。
     /// </summary>
@@ -90,6 +102,16 @@ public sealed class HarnessRuntime
     {
         var definition = _registry.Resolve(agentId);
         return _sessions.Create(definition.Id, definition.Name);
+    }
+
+    /// <summary>
+    /// 用**指定** sessionId 开始/恢复会话：宿主自己持久化了 conversationId（或重启后续聊）时用这个重载。
+    /// 配合 <see cref="Sessions.IAgentSessionStore"/> 时，框架会话会从存储恢复，历史与工具状态延续上一进程。
+    /// </summary>
+    public AetherSession StartSession(string agentId, Guid sessionId)
+    {
+        var definition = _registry.Resolve(agentId);
+        return _sessions.GetOrAdd(sessionId, definition.Id, definition.Name);
     }
 
     // —— AetherSession 簿记三件套（RunAsync 与 RunStreamingAsync(Guid,…) 共用）：每轮 run 的状态迁移
@@ -171,6 +193,8 @@ public sealed class HarnessRuntime
         }
 
         CompleteTurn(session, assistantText);
+        await _registry.SaveFrameworkSessionAsync(sessionId, agent, frameworkSession, cancellationToken)
+            .ConfigureAwait(false);
         return assistantText;
     }
 
@@ -222,6 +246,9 @@ public sealed class HarnessRuntime
         }
 
         CompleteTurn(session, fullText);
+        // 配了会话存储时每轮结束落盘——下一轮/下次启动都能接着这个会话（失败降级，不影响本轮结果）。
+        await _registry.SaveFrameworkSessionAsync(sessionId, agent, frameworkSession, cancellationToken)
+            .ConfigureAwait(false);
         // RunDone 不在此处发射——RunStreamingCoreAsync 在流正常跑完时已统一发射（对所有消费者
         // 一致：聊天/工作流/Automation），此处再发会双发。
         return fullText;
