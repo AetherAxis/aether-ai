@@ -37,18 +37,11 @@ jobs:
         working-directory: aether-ai
 
       # 测试按被测项目拆分：Core / Brains.Abstractions / Brains.Rule{,.RulesEngine,.NRules} /
-      # Brains.Code{,.Compilation} / Brains.Routing / Brains.Llm / Harness / Hosting / Mcp / Memory 共 13 个程序集。
+      # Brains.Code{,.Compilation} / Brains.Routing / Brains.Llm / Harness / Hosting / Mcp / Memory /
+      # Integration 共 14 个程序集。跨包属性（一个宿主装下全部大脑、各部署形态的依赖闭包边界）
+      # 由 Integration.Tests 断言，不再依赖额外的控制台「消费者」。
       # 零真实模型调用（LLM 路径用脚本化 IChatClient 替身）、零真实 MCP 连接（只测配置与失败隔离）；
       # 代码大脑的编译用例走仓内 Roslyn/FCS，不访问外部端点。
       - name: Test
         run: dotnet test aether-ai.slnx -c Release --no-build
-        working-directory: aether-ai
-
-      - name: Run dependency consumers
-        run: |
-          dotnet run --project tests/Consumers/Aether.AI.RuleOnly.Consumer -c Release --no-build
-          dotnet run --project tests/Consumers/Aether.AI.PrecompiledCode.Consumer -c Release --no-build
-          dotnet run --project tests/Consumers/Aether.AI.CSharpCompilation.Consumer -c Release --no-build
-          # 同一宿主里跑全部大脑：program / rulesEngine / nRules / Code / LLM（脚本化，无 key）
-          dotnet run --project tests/Consumers/Aether.AI.BrainMatrix.Consumer -c Release --no-build
         working-directory: aether-ai

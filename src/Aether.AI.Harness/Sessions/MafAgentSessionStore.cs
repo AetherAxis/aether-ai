@@ -23,13 +23,14 @@ public sealed class MafAgentSessionStore : Microsoft.Agents.AI.AgentSessionStore
         await _inner.SaveAsync(ToStoreKey(agent, key), json, cancellationToken).ConfigureAwait(false);
     }
 
-    public override async ValueTask<AgentSession> GetSessionAsync(
+    /// <summary>按 MAF 契约：查不到返回 <see langword="null"/>，<b>不</b>新建会话（要新建用 <see cref="GetOrCreateSessionAsync"/>）。</summary>
+    public override async ValueTask<AgentSession?> GetSessionAsync(
         AIAgent agent, AgentSessionStoreKey key, CancellationToken cancellationToken = default)
     {
-        var json = await _inner.GetAsync(ToStoreKey(agent, key), cancellationToken).ConfigureAwait(false)
-            ?? throw new InvalidOperationException(
-                $"No persisted session for key '{ToStoreKey(agent, key)}'.");
-        return await agent.DeserializeSessionAsync(json, cancellationToken: cancellationToken).ConfigureAwait(false);
+        var json = await _inner.GetAsync(ToStoreKey(agent, key), cancellationToken).ConfigureAwait(false);
+        return json is null
+            ? null
+            : await agent.DeserializeSessionAsync(json.Value, cancellationToken: cancellationToken).ConfigureAwait(false);
     }
 
     public override async ValueTask<AgentSession> GetOrCreateSessionAsync(

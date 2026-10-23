@@ -4,16 +4,16 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <!-- 该消费者刻意同时引用全部大脑实现（含 LLM/OpenAI），用于验证它们在同一个宿主里可共存、可切换；
-         依赖边界由其他三个消费者各自守（RuleOnly / PrecompiledCode / CSharpCompilation）。 -->
+    <!-- 一个宿主同时引入全部大脑实现（program / rulesEngine / nRules / Code / LLM），演示同一接缝下可共存、可切换。
+         各部署形态的「依赖边界」由 tests/Aether.AI.Integration.Tests 的 DependencyClosureTests 断言。 -->
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\src\Aether.AI.Brains.Rule\Aether.AI.Brains.Rule.csproj" />
-    <ProjectReference Include="..\..\..\src\Aether.AI.Brains.Rule.RulesEngine\Aether.AI.Brains.Rule.RulesEngine.csproj" />
-    <ProjectReference Include="..\..\..\src\Aether.AI.Brains.Rule.NRules\Aether.AI.Brains.Rule.NRules.csproj" />
-    <ProjectReference Include="..\..\..\src\Aether.AI.Brains.Code.CSharp\Aether.AI.Brains.Code.CSharp.csproj" />
-    <ProjectReference Include="..\..\..\src\Aether.AI.Brains.Llm\Aether.AI.Brains.Llm.csproj" />
-    <ProjectReference Include="..\..\..\src\Aether.AI.Hosting\Aether.AI.Hosting.csproj" />
+    <ProjectReference Include="..\..\src\Aether.AI.Brains.Rule\Aether.AI.Brains.Rule.csproj" />
+    <ProjectReference Include="..\..\src\Aether.AI.Brains.Rule.RulesEngine\Aether.AI.Brains.Rule.RulesEngine.csproj" />
+    <ProjectReference Include="..\..\src\Aether.AI.Brains.Rule.NRules\Aether.AI.Brains.Rule.NRules.csproj" />
+    <ProjectReference Include="..\..\src\Aether.AI.Brains.Code.CSharp\Aether.AI.Brains.Code.CSharp.csproj" />
+    <ProjectReference Include="..\..\src\Aether.AI.Brains.Llm\Aether.AI.Brains.Llm.csproj" />
+    <ProjectReference Include="..\..\src\Aether.AI.Hosting\Aether.AI.Hosting.csproj" />
   </ItemGroup>
 </Project>

@@ -6,7 +6,7 @@ using Aether.AI.Brains.Rule.NRules;
 using Microsoft.Extensions.AI;
 using NRules.Fluent.Dsl;
 
-namespace Aether.AI.BrainMatrix.Consumer;
+namespace Aether.AI.Samples.BrainMatrix;
 
 /// <summary>Code 大脑：把「查」后的内容交给 Echo，再用工具结果收尾。</summary>
 internal sealed class EchoCodeBrain : CodeRuleBrain
@@ -41,7 +41,7 @@ public sealed class MatrixReplyRule : Rule
     }
 }
 
-/// <summary>无 key 环境下的 LLM 替身：第一回合请求调用 Echo，第二回合把工具结果织进终答。</summary>
+/// <summary>示例用 LLM 替身：第一回合请求调用 Echo，第二回合把工具结果织进终答。</summary>
 internal sealed class ScriptedChatClientFactory : IChatClientFactory
 {
     private readonly ScriptedChatClient _client = new();

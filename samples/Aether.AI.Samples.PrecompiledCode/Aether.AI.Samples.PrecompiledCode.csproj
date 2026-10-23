@@ -4,13 +4,12 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <ForbiddenAssemblyPattern>^(OpenAI|Microsoft\.Agents\.AI\.OpenAI|Microsoft\.CodeAnalysis|FSharp\.Compiler)</ForbiddenAssemblyPattern>
+    <!-- 预编译代码大脑示例：不引入 Roslyn/FCS/OpenAI。
+         该「依赖边界」由 tests/Aether.AI.Integration.Tests 的 DependencyClosureTests 断言。 -->
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\src\Aether.AI.Brains.Code.CSharp\Aether.AI.Brains.Code.CSharp.csproj" />
-    <ProjectReference Include="..\..\..\src\Aether.AI.Hosting\Aether.AI.Hosting.csproj" />
+    <ProjectReference Include="..\..\src\Aether.AI.Brains.Code.CSharp\Aether.AI.Brains.Code.CSharp.csproj" />
+    <ProjectReference Include="..\..\src\Aether.AI.Hosting\Aether.AI.Hosting.csproj" />
   </ItemGroup>
-
-  <Import Project="..\DependencyBoundary.targets" />
 </Project>

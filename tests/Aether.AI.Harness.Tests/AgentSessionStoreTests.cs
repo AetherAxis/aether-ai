@@ -118,16 +118,15 @@ public class AgentSessionStoreTests
     }
 
     [Fact]
-    public async Task Maf_store_adapter_reports_missing_keys_instead_of_inventing_sessions()
+    public async Task Maf_store_adapter_returns_null_for_missing_keys_instead_of_inventing_sessions()
     {
         var bridge = new MafAgentSessionStore(new InMemoryAgentSessionStore());
         var agent = NewFactory().Create(LlmDefinition());
         var key = new AgentSessionStoreKey("nope", new Dictionary<string, string>());
 #pragma warning restore MAAI001
 
-        var error = await Assert.ThrowsAsync<InvalidOperationException>(
-            async () => await bridge.GetSessionAsync(agent, key));
-        Assert.Contains("nope", error.Message);
+        // MAF 契约：GetSessionAsync 查不到返回 null（本方法永不新建会话）。
+        Assert.Null(await bridge.GetSessionAsync(agent, key));
     }
 
     // —— helpers ——

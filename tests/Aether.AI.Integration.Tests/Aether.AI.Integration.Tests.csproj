@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <!-- 跨包集成：一个宿主里同时装下全部大脑实现。各单包测试不引其他大脑，边界由此项目统一验证。 -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Aether.AI.Brains.Code\Aether.AI.Brains.Code.csproj" />
+    <ProjectReference Include="..\..\src\Aether.AI.Brains.Code.CSharp\Aether.AI.Brains.Code.CSharp.csproj" />
+    <ProjectReference Include="..\..\src\Aether.AI.Brains.Code.Compilation.CSharp\Aether.AI.Brains.Code.Compilation.CSharp.csproj" />
+    <ProjectReference Include="..\..\src\Aether.AI.Brains.Llm\Aether.AI.Brains.Llm.csproj" />
+    <ProjectReference Include="..\..\src\Aether.AI.Brains.Rule\Aether.AI.Brains.Rule.csproj" />
+    <ProjectReference Include="..\..\src\Aether.AI.Brains.Rule.NRules\Aether.AI.Brains.Rule.NRules.csproj" />
+    <ProjectReference Include="..\..\src\Aether.AI.Brains.Rule.RulesEngine\Aether.AI.Brains.Rule.RulesEngine.csproj" />
+    <ProjectReference Include="..\..\src\Aether.AI.Core\Aether.AI.Core.csproj" />
+    <ProjectReference Include="..\..\src\Aether.AI.Harness\Aether.AI.Harness.csproj" />
+    <ProjectReference Include="..\..\src\Aether.AI.Hosting\Aether.AI.Hosting.csproj" />
+  </ItemGroup>
+
+</Project>

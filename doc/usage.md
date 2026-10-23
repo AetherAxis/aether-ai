@@ -192,7 +192,7 @@ services.AddAetherAI().AddSystemTools();                            // 全量 15
 
 工具清单、审批等级、宿主能力表与 `Grep`/`Glob` 的显式 `path` 约束见
 [`aether-ai-integrations/README.md`](../../aether-ai-integrations/README.md)。可用规则大脑调用它们
-自验：`dotnet run --project aether-ai-integrations/tests/Consumers/Aether.SystemTools.AI.Consumer`。
+自验：`dotnet run --project aether-ai-integrations/samples/Aether.SystemTools.AI.Sample`。
 
 ## 会话持久化（可选）
 
@@ -265,11 +265,12 @@ Routing 默认关闭，仅在显式设置 `EnableBrainRouting=true` 时启用。
 |---|---|---|
 | Rule `program` | 测试 + `BrainMatrix` consumer | 通过 |
 | Rule `rulesEngine` | 测试 + `BrainMatrix` consumer | 通过 |
-| Rule `nRules` | 测试 + `BrainMatrix` consumer | 通过 |
-| Code（预编译） | `PrecompiledCode` consumer + 测试 | 通过 |
-| Code（C# 动态编译） | `CSharpCompilation` consumer + 测试 | 通过 |
+| Rule `nRules` | 测试 + `BrainMatrix` 集成测试 | 通过 |
+| Code（预编译） | `PrecompiledCode` 示例 + 测试 | 通过 |
+| Code（C# 动态编译） | `CSharpCompilation` 示例 + 测试 | 通过 |
 | LLM | 脚本化 `IChatClient` 替身（无 key）；`LlmBrainFactory` 接线 + 工具回合闭环 | 接线通过，**真实端点未验** |
 
-`tests/Consumers/Aether.AI.BrainMatrix.Consumer` 在一个宿主里同时注册全部实现，用
-`BrainBackend(...)` 逐个跑通「用户输入 → 大脑决策 → 工具执行 → 回填 → 终答」，CI 会直接运行它。
-LLM 那一路是替身，验证的是同一条接缝上的接线与工具回合，不代表模型质量。
+`tests/Aether.AI.Integration.Tests` 在一个宿主里同时注册全部实现，用
+`BrainBackend(...)` 逐个跑通「用户输入 → 大脑决策 → 工具执行 → 回填 → 终答」，随 `dotnet test` 执行；
+可运行的等价示例在 `samples/Aether.AI.Samples.BrainMatrix`。LLM 那一路是替身，验证的是同一条接缝上的
+接线与工具回合，不代表模型质量。

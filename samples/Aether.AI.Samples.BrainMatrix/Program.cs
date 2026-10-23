@@ -1,4 +1,3 @@
-using Aether.AI.BrainMatrix.Consumer;
 using Aether.AI.Brains.Abstractions;
 using Aether.AI.Brains.Code;
 using Aether.AI.Brains.Code.CSharp;
@@ -9,12 +8,12 @@ using Aether.AI.Brains.Rule.RulesEngine;
 using Aether.AI.Core.Agents;
 using Aether.AI.Harness.Agents;
 using Aether.AI.Hosting;
+using Aether.AI.Samples.BrainMatrix;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 
-// 一个宿主同时注册全部大脑实现，逐个真实跑通「用户输入 → 大脑决策 → 工具执行 → 回填 → 终答」。
-// LLM 用脚本化 IChatClient 代替真实模型（本机无 key），验证的是 LLM 大脑在同一条接缝上的接线，
-// 不是模型质量；真实端点仍由宿主侧验收。
+// 一个宿主同时注册全部大脑实现，逐个跑通「用户输入 → 大脑决策 → 工具执行 → 回填 → 终答」。
+// LLM 用脚本化 IChatClient 代替真实模型（示例无需 key）；真实模型只需换成 AddLlmBrains(o => o.ApiKey = ...)。
 var codeBrains = new CodeBrainRegistry();
 codeBrains.Register("code-matrix", static () => new EchoCodeBrain());
 
@@ -38,27 +37,18 @@ await RunAsync(agents, "nRules", NRulesAgent());
 await RunAsync(agents, "code(precompiled)", CodeAgent());
 await RunAsync(agents, "llm(scripted)", LlmAgent());
 
-Console.WriteLine("BrainMatrix:PASS");
-
 static async Task RunAsync(AgentFactory agents, string label, AgentDefinition definition)
 {
     var agent = agents.Create(definition);
     var session = await agent.CreateSessionAsync();
     var output = string.Empty;
     await foreach (var update in agent.RunStreamingAsync("查600000", session))
-    {
         output += update.Text;
-    }
 
-    if (output != "done:echo:600000")
-    {
-        throw new InvalidOperationException($"{label}: unexpected output '{output}'");
-    }
-
-    Console.WriteLine($"{label}:PASS");
+    Console.WriteLine($"{label,-18} {output}");
 }
 
-// —— 五份定义：同一输入、同一工具、同一期望输出 ——
+// —— 五份定义：同一输入、同一工具、同一期望输出（done:echo:600000）——
 
 static AgentDefinition ProgramAgent() => new AgentBuilder("program-matrix")
     .Name("Program matrix")
@@ -118,8 +108,8 @@ static AgentDefinition NRulesAgent() => new AgentBuilder("nrules-matrix")
     .RuleSource("""
         {
           "ruleTypes": [
-            "Aether.AI.BrainMatrix.Consumer.MatrixQueryRule",
-            "Aether.AI.BrainMatrix.Consumer.MatrixReplyRule"
+            "Aether.AI.Samples.BrainMatrix.MatrixQueryRule",
+            "Aether.AI.Samples.BrainMatrix.MatrixReplyRule"
           ]
         }
         """)

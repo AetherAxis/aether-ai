@@ -7,36 +7,30 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
+// 动态 C# 编译：源码来自 ICodeNoteSource（示例里是内存实现，生产里接你的笔记/数据库），
+// 编译产物按 id 注册进代码大脑注册表，宿主照常按 id 召唤。
 var services = new ServiceCollection();
 services.AddSingleton(typeof(ILogger<>), typeof(NullLogger<>));
 services.AddSingleton<ICodeNoteSource>(new InMemorySource());
 services.AddCSharpBrainCompilation();
-services.AddCSharpBrainCompilation();
-using var provider = services.BuildServiceProvider();
-if (provider.GetServices<ICodeBrainCompiler>().Count() != 1)
-    throw new InvalidOperationException("C# compiler registration is not idempotent.");
 
+using var provider = services.BuildServiceProvider();
 await provider.GetRequiredService<ICodeCompilationService>().LoadAsync();
+
 var registry = provider.GetRequiredService<ICodeBrainRegistry>();
 if (!registry.TryCreate("dynamic-code", out var brain, out var error))
-    throw new InvalidOperationException(error ?? "Compiled brain was not registered.");
-
-var output = await brain!.DecideAsync(new BrainContext
 {
-    LatestUser = new ChatMessage(ChatRole.User, "hello"),
-}, default);
-var text = AssertSingleText(output);
-if (text != "compiled:hello") throw new InvalidOperationException($"Unexpected output: {text}");
-Console.WriteLine("CSharpCompilation:PASS");
-
-static string AssertSingleText(IReadOnlyList<AIContent> contents)
-{
-    var texts = contents.OfType<TextContent>().ToArray();
-    if (texts.Length != 1) throw new InvalidOperationException($"Expected one text result, found {texts.Length}.");
-    return texts[0].Text;
+    Console.WriteLine($"编译/注册失败：{error}");
+    return;
 }
 
-sealed class InMemorySource : ICodeNoteSource
+var contents = await brain!.DecideAsync(
+    new BrainContext { LatestUser = new ChatMessage(ChatRole.User, "hello") }, default);
+
+Console.WriteLine(contents.OfType<TextContent>().Single().Text); // compiled:hello
+
+/// <summary>代码大脑源码提供者：示例用内存源，生产接笔记/数据库。</summary>
+internal sealed class InMemorySource : ICodeNoteSource
 {
     private const string Source = """
         using System.Threading.Tasks;
