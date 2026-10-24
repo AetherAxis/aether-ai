@@ -298,6 +298,109 @@ public class ToolApprovalSpikeTests
         public IChatClient Create(string? modelId) => _client;
     }
 
+    /// <summary>
+    /// RunInteractiveAsync：审批协作循环收在 Harness 内——resolver 批准 → 恢复轮执行工具 → 终答，
+    /// 单次调用完成旧「首轮流捕获请求 + 带 decision 二次调用」的两步手工协议。
+    /// </summary>
+    [Fact]
+    public async Task RunInteractiveAsync_resolves_approval_and_completes_turn()
+    {
+        var client = new ScriptedChatClient();
+        client.Script.Add(new ChatResponseUpdate
+        {
+            Contents = new AIContent[]
+            {
+                new FunctionCallContent("call-1", "PlaceOrder",
+                    new Dictionary<string, object?> { ["symbol"] = "IF2406" })
+            }
+        });
+        client.Script.Add(new ChatResponseUpdate { Contents = new AIContent[] { new TextContent("已报单 IF2406") } });
+
+        var registry = new ToolRegistry();
+        registry.Register("PlaceOrder", "Place a trading order.", "test",
+            _ => AIFunctionFactory.Create((Func<string, string>)PlaceOrder), Aether.AI.Core.Agents.ToolApprovalLevel.Dangerous);
+        var factory = new AgentFactory(new ConstChatClientFactory(client), registry, new SkillRegistry());
+        var runtime = new HarnessRuntime(factory, new SessionManager());
+        runtime.RegisterAgent(new AgentDefinition
+        {
+            Id = "interactive-rt",
+            Name = "InteractiveRT",
+            Instructions = "be brief",
+            Tools = new[] { "PlaceOrder" },
+            RequireToolApproval = true,
+        });
+
+        var session = runtime.StartSession("interactive-rt");
+
+        var requests = new List<ToolApprovalRequest>();
+        bool sawResult = false;
+        var final = await runtime.RunInteractiveAsync(session.SessionId, "查天气", new StreamHandlers(
+            OnApprovalRequest: (req, _) => { requests.Add(req); return Task.CompletedTask; },
+            OnToolEvent: (ev, _) =>
+            {
+                if (ev.Kind == ToolStreamEventKind.Result) sawResult = true;
+                return Task.CompletedTask;
+            }),
+            approvalResolver: (req, _) => Task.FromResult<ToolApprovalDecision?>(
+                new ToolApprovalDecision(req.RequestId, Approved: true, Reason: "测试批准", AlwaysApprove: false)));
+
+        // 消费者 OnApprovalRequest 照常收到请求（渲染审批卡），且只有一次。
+        Assert.Single(requests);
+        Assert.Equal("PlaceOrder", requests[0].ToolName);
+        // 恢复轮由 Harness 自动重入：工具执行 + 终答。
+        Assert.True(sawResult, "resolver 批准后应自动恢复执行工具");
+        Assert.Contains("报单", final);
+    }
+
+    /// <summary>
+    /// RunInteractiveAsync：resolver 返回 null（用户取消审批）→ 以已累积文本正常收敛，
+    /// 工具不执行、不再恢复。
+    /// </summary>
+    [Fact]
+    public async Task RunInteractiveAsync_cancelled_resolver_ends_turn_without_tool_execution()
+    {
+        var client = new ScriptedChatClient();
+        client.Script.Add(new ChatResponseUpdate
+        {
+            Contents = new AIContent[]
+            {
+                new FunctionCallContent("call-1", "PlaceOrder",
+                    new Dictionary<string, object?> { ["symbol"] = "IF2406" })
+            }
+        });
+
+        var registry = new ToolRegistry();
+        registry.Register("PlaceOrder", "Place a trading order.", "test",
+            _ => AIFunctionFactory.Create((Func<string, string>)PlaceOrder), Aether.AI.Core.Agents.ToolApprovalLevel.Dangerous);
+        var factory = new AgentFactory(new ConstChatClientFactory(client), registry, new SkillRegistry());
+        var runtime = new HarnessRuntime(factory, new SessionManager());
+        runtime.RegisterAgent(new AgentDefinition
+        {
+            Id = "interactive-cancel",
+            Name = "InteractiveCancel",
+            Instructions = "be brief",
+            Tools = new[] { "PlaceOrder" },
+            RequireToolApproval = true,
+        });
+
+        var session = runtime.StartSession("interactive-cancel");
+
+        ToolApprovalRequest? approvalReq = null;
+        bool sawResult = false;
+        var final = await runtime.RunInteractiveAsync(session.SessionId, "查天气", new StreamHandlers(
+            OnApprovalRequest: (req, _) => { approvalReq = req; return Task.CompletedTask; },
+            OnToolEvent: (ev, _) =>
+            {
+                if (ev.Kind == ToolStreamEventKind.Result) sawResult = true;
+                return Task.CompletedTask;
+            }),
+            approvalResolver: (req, _) => Task.FromResult<ToolApprovalDecision?>(null));
+
+        Assert.NotNull(approvalReq);          // 请求照常上抛
+        Assert.False(sawResult);              // 取消 → 工具未执行
+        Assert.Equal(string.Empty, final);    // 无答案 token → 空文本收敛（非异常）
+    }
+
     /// <summary>按脚本逐条返回流式更新的伪 IChatClient；每次 GetStreamingResponseAsync 消费一条脚本项。</summary>
     private sealed class ScriptedChatClient : IChatClient
     {

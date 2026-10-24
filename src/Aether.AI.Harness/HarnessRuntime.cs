@@ -255,6 +255,60 @@ public sealed class HarnessRuntime
     }
 
     /// <summary>
+    /// 交互式流式运行：<see cref="RunStreamingAsync(Guid,string,StreamHandlers?,ToolApprovalDecision?,string?,CancellationToken)"/>
+    /// 的审批自恢复形态——**审批协作循环收在 Harness 内**。流冒出审批请求时调 <paramref name="approvalResolver"/>
+    /// 取决定：返回决定 → 自动带其重入恢复轮（同一会话，被挂起的工具继续执行），循环至本轮不再冒新请求；
+    /// 返回 <c>null</c>（用户取消/关闭审批框）→ 以已累积文本正常结束本轮（不再恢复）。
+    /// <para>
+    /// 消费者从此不必自持 while 循环与 approvalResponse 重入；<paramref name="handlers"/> 的
+    /// <c>OnApprovalRequest</c> 照常收到每个请求（渲染审批卡用），捕获供恢复用由本方法内部完成。
+    /// 自动批策略（如 AutoEdit 按工具等级自动放行）属消费者策略——resolver 自行决定返回决定还是 null，
+    /// Harness 不掺策略。未提供 resolver 时行为与 RunStreamingAsync 完全一致（请求照常上抛、不自动恢复）。
+    /// </para>
+    /// </summary>
+    public async Task<string> RunInteractiveAsync(
+        Guid sessionId,
+        string userMessage,
+        StreamHandlers? handlers = null,
+        Func<ToolApprovalRequest, CancellationToken, Task<ToolApprovalDecision?>>? approvalResolver = null,
+        string? desiredMode = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (approvalResolver is null)
+            return await RunStreamingAsync(sessionId, userMessage, handlers,
+                approvalResponse: null, desiredMode, cancellationToken).ConfigureAwait(false);
+
+        ToolApprovalDecision? approvalResponse = null;
+        while (true)
+        {
+            // 每轮新闭包捕获本轮冒出的请求（轮间不串）；消费者回调（如有）先收到，Harness 再捕获。
+            // 注意 approvalResponse 恢复轮里 RunStreamingAsync 走 ApprovalRecovery 恢复流，
+            // userMessage 不重发（BeginTurn isRecoveryTurn）——同一句传入是安全的。
+            ToolApprovalRequest? pending = null;
+            StreamHandlers effective = handlers is null
+                ? new StreamHandlers(OnApprovalRequest: (req, _) => { pending = req; return Task.CompletedTask; })
+                : handlers with
+                {
+                    OnApprovalRequest = async (req, ct) =>
+                    {
+                        pending = req;
+                        if (handlers.OnApprovalRequest is not null)
+                            await handlers.OnApprovalRequest(req, ct).ConfigureAwait(false);
+                    }
+                };
+
+            var full = await RunStreamingAsync(sessionId, userMessage, effective, approvalResponse, desiredMode, cancellationToken)
+                .ConfigureAwait(false);
+            if (pending is null)
+                return full;   // 本轮不再冒审批请求 → 正常收敛
+            var decision = await approvalResolver(pending, cancellationToken).ConfigureAwait(false);
+            if (decision is null)
+                return full;   // resolver 放弃（用户取消）→ 以已累积文本结束本轮，不再恢复
+            approvalResponse = decision;
+        }
+    }
+
+    /// <summary>
     /// 用一个**已构建好的** <see cref="AIAgent"/>（如 workflow 包成的 agent）流式运行一轮，
     /// 复用与 <see cref="RunStreamingAsync(Guid,string,StreamHandlers?,ToolApprovalDecision?,string?,CancellationToken)"/>
     /// 相同的流式循环 + 事件提取。无 AetherSession 簿记（调用方自管会话）。
