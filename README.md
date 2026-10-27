@@ -24,6 +24,30 @@ Microsoft Agent Framework 之上的本地 Agent 运行时。基础大脑只有�
 | `Aether.AI.Hosting` | `AddAetherAI()` 通用 DI、Memory 与 OTel；不引用 OpenAI/Roslyn/FCS |
 | `Aether.AI.Memory* / Mcp / Workflows` | 原有可选设施 |
 
+### 为什么拆这么多程序集（别合并它们）
+
+`Brains.Code` / `.Code.CSharp` / `.Code.Compilation` / `.Compilation.CSharp` 这组名字容易被看成「重复」，
+其实是**三种不同东西**——合并任何一对，都会把重依赖扩散到不需要它的宿主：
+
+| 程序集 | 是什么 | 带进来的重依赖 |
+|---|---|---|
+| `Brains.Code` | 语言无关的执行骨架：协程驱动、代码大脑注册表、按 run 隔离 | 无（只 MEAI 抽象） |
+| `Brains.Code.CSharp` / `.FSharp` | **作者层**：写大脑时用的 `Step` / `BrainCtx` 契约 | 无 Roslyn、无 FCS |
+| `Brains.Code.Compilation` | **编译器插件契约**：源码加载、编译、注册的协调 | 无 |
+| `.Compilation.CSharp` | Roslyn 实现 | `Microsoft.CodeAnalysis.CSharp` |
+| `.Compilation.FSharp` | FCS 实现 + .NET ref-pack 定位 | `FSharp.Compiler.Service` + ref pack |
+| `Brains.Llm` | OpenAI-compatible 客户端 + LLM 工厂 | `Microsoft.Agents.AI.OpenAI` |
+| `Harness` | MAF 构建与执行 | `Microsoft.Agents.AI(.Harness)` |
+| `Hosting` | DI / Memory / OTel | OpenTelemetry 四件套 |
+
+**规则**（新增语言或规则后端时按这个走）：
+
+1. 契约程序集不引实现、不引重依赖；重依赖只出现在最右端的实现程序集。
+2. 语言实现之间**互不引用**（C# 实现不引 FCS，F# 实现不引 Roslyn）——宿主才能只带一个。
+3. **宿主决定带哪些**：桌面 head 引编译管线，移动端只引作者层 → 不背编译器。
+   把 `.Compilation.CSharp` 合进 `Brains.Code`，就等于强制移动端链接 Roslyn。
+4. 新语言 = 一对 `Code.<Lang>`（作者层）+ `Compilation.<Lang>`（实现），再接进 `Compilation` 的插件契约。
+
 ## 大脑接缝
 
 LLM 不是运行时的前提，只是三类大脑之一。Harness 只认一个接缝：
