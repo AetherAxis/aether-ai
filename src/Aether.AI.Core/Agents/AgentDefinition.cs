@@ -15,6 +15,13 @@ public sealed class AgentDefinition
     public string Name { get; init; } = string.Empty;
 
     /// <summary>
+    /// 一句话说明（给目录/选择器展示用）。与 <see cref="Instructions"/> 分开：后者是喂给模型的行为约束，
+    /// 前者是给**人**看的摘要——用户自建 agent 时两者往往不同（提示词可能很长，摘要要短）。
+    /// 空 = 宿主可退回用 <see cref="Instructions"/> 的前若干字符。
+    /// </summary>
+    public string Description { get; init; } = string.Empty;
+
+    /// <summary>
     /// 大脑类型：默认 <see cref="EngineKind.Llm"/>；另有声明式 <see cref="EngineKind.Rule"/>
     /// 与程序式 <see cref="EngineKind.Code"/>。三类均通过 Harness 复用工具、流式与会话设施。
     /// </summary>
