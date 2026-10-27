@@ -187,7 +187,8 @@ services.AddRuleBrains();
 services.AddAetherAI().AddSystemTools();                            // 全量 15 个
 // services.AddAetherAI().AddSystemTools(includeCommandTools: false); // 可移植子集 13 个
 
-// 链上钱包适配器同理：AddLedgerTools(builder, walletSeedFilePath)
+// 链上钱包适配器同理：AddLedgerTools(builder, walletSeedFilePath, nodeAddress, custodyAddress)
+// （节点/custody 地址明文给，桌面填本机、手机填服务端——解析优先级 参数 > env > 默认）
 ```
 
 工具清单、审批等级、宿主能力表与 `Grep`/`Glob` 的显式 `path` 约束见
