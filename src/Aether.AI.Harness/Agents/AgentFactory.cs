@@ -78,6 +78,9 @@ public sealed class AgentFactory
     /// <summary>skills 目录。配置后用 MAF AgentFileSkillsSource 加载（支持脚本）；否则退回 SkillRegistry 纯提示词。</summary>
     public string? SkillsDirectory { get; set; }
 
+    /// <summary>是否允许 skill 脚本执行（默认 true）。手机端置 false：SKILL.md 正文照常加载，只挡 run_skill_script。</summary>
+    public bool EnableSkillScripts { get; set; } = true;
+
     /// <summary>
     /// 执行 .py 脚本的解释器（默认 python3）。由宿主通过 AetherAIOptions.PythonExecutable 在构造后设置，
     /// 转发给 <see cref="SkillScriptRunner"/>（实际执行件）。
@@ -382,7 +385,8 @@ public sealed class AgentFactory
         {
             return new AgentSkillsProviderBuilder()
                 .UseLoggerFactory(_loggerFactory ?? Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance)
-                .UseFileSkill(SkillsDirectory, options: null, _skillScriptRunner)
+                .UseFileSkill(SkillsDirectory, options: null,
+                    EnableSkillScripts ? _skillScriptRunner : DisabledSkillScriptRunner)
                 .UseOptions(DisableSkillApprovals)
                 .UseCachingOptions(c => c.RefreshInterval = TimeSpan.FromSeconds(30))
                 .Build();
@@ -402,6 +406,14 @@ public sealed class AgentFactory
             .UseOptions(DisableSkillApprovals)
             .Build();
     }
+
+    /// <summary>手机端/禁用脚本时的 skill 脚本执行件：脚本不落地执行，返回一条可读原因——
+    /// 模型据此改走「只按 SKILL.md 步骤推理」，而不是拿到一个像工具失败的空白结果。</summary>
+    private static Task<object?> DisabledSkillScriptRunner(
+        AgentFileSkill skill, AgentFileSkillScript script,
+        System.Text.Json.JsonElement? rawArguments, IServiceProvider? serviceProvider, CancellationToken cancellationToken)
+        => Task.FromResult<object?>(
+            $"当前宿主不支持执行 skill 脚本（{script.FullPath}）。请只依据 SKILL.md 的说明推理，不要重试运行脚本。");
 
     /// <summary>skill 工具审批全关（聊天页无审批 UI，MAF 默认审批会挡住 run_skill_script——模型只 load 不执行）。</summary>
     private static void DisableSkillApprovals(AgentSkillsProviderOptions o)

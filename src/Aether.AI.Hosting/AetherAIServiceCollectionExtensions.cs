@@ -120,6 +120,7 @@ public static class AetherAIServiceCollectionExtensions
             factory.FileMemoryRoot = sp.GetRequiredService<AetherAIOptions>().FileMemoryRoot;
             factory.SkillsDirectory = sp.GetRequiredService<AetherAIOptions>().SkillsDirectory;
             factory.PythonExecutable = sp.GetRequiredService<AetherAIOptions>().PythonExecutable;
+            factory.EnableSkillScripts = sp.GetRequiredService<AetherAIOptions>().EnableSkillScripts;
             return factory;
         });
         services.AddSingleton<SessionManager>();

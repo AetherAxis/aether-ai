@@ -34,6 +34,13 @@ public sealed class AetherAIOptions
     public string? PythonExecutable { get; set; }
 
     /// <summary>
+    /// 是否允许 skill 执行脚本（<c>run_skill_script</c>；.py/.sh/.js 子进程）。默认 <c>true</c>。
+    /// 手机端（iOS 沙盒禁止 fork / 无 python 解释器）设为 <c>false</c>：SKILL.md 的**知识正文照常加载**
+    /// （提示词级 skill 两端同源），只有脚本执行被一条明确错误挡住——与「桌面专属工具」同一套宿主取舍。
+    /// </summary>
+    public bool EnableSkillScripts { get; set; } = true;
+
+    /// <summary>
     /// Playwright 浏览器持久 profile 目录（browser_open 工具 + 网络面板共用同一 IBrowserService）。
     /// cookie/会话存盘于此——用户每个网站首次手动登录一次，后续 browser_open 自动带登录态（不用每次重登）。
     /// 为 null 时退回临时 profile（每次新开、不持久，兼容旧行为）。桌面端应设为租户数据目录下的子目录

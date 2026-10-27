@@ -26,9 +26,25 @@ public static class AetherAIBuilderMcpExtensions
     /// 同时注册 <see cref="IMcpManagementService"/>（管理 UI 增删改 server，写回此目录）。镜像 skills 目录模式。
     /// </summary>
     public static AetherAIBuilder AddMcpServersFromDirectory(this AetherAIBuilder builder, string directory)
+        => AddMcpServersFromDirectory(builder, directory, filter: null);
+
+    /// <summary>
+    /// 同 <see cref="AddMcpServersFromDirectory(AetherAIBuilder,string)"/>，但按宿主裁掉跑不了的 server：
+    /// <paramref name="filter"/> 为 <c>null</c> 时全部保留。手机端传「只要 HTTP/SSE」——
+    /// stdio（<c>command</c>+<c>args</c>）要 spawn 子进程，iOS 沙盒直接禁止；HTTP 连接器两端同源可用，
+    /// 这正是「手机桌面一体」的取舍点（对齐豆包：连接器是远端服务，技能包才分本地/云端执行）。
+    /// 被裁掉的 server 连**连接尝试**都不发生（不报错、不进管理列表），配置 JSON 原样留在盘上，
+    /// 桌面端读到它就自动生效。
+    /// </summary>
+    public static AetherAIBuilder AddMcpServersFromDirectory(this AetherAIBuilder builder, string directory,
+        Func<McpServerConfig, bool>? filter)
     {
         if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
-        EnsureRegistry(builder.Services, _ => McpServerConfigLoader.LoadFromDirectory(directory));
+        EnsureRegistry(builder.Services, _ =>
+        {
+            var configs = McpServerConfigLoader.LoadFromDirectory(directory);
+            return filter is null ? configs : configs.Where(filter).ToList();
+        });
         builder.Services.AddSingleton(new McpManagementServiceOptions(directory));
         builder.Services.AddSingleton<IMcpManagementService, McpManagementService>();
         return builder;

@@ -128,6 +128,22 @@ public sealed class ToolRegistry
             .OrderBy(t => t.Category).ThenBy(t => t.Name)
             .ToList();
 
+    /// <summary>
+    /// 获取**当前宿主可用**的工具元数据——<see cref="GetAllMetas"/> 按 <see cref="CurrentHost"/> 过滤后的结果，
+    /// 过滤口径与 <see cref="ResolveAll"/> 完全一致。UI 勾选列表用它：手机端看不到「执行命令」这类桌面专属工具，
+    /// 桌面端也看不到手机专属工具；宿主为 <see cref="HostCapability.All"/>（无宿主约束的组合）时不过滤。
+    /// </summary>
+    public IReadOnlyList<ToolMeta> GetUsableMetas()
+    {
+        var host = _currentHost();
+        if (host == HostCapability.All) return GetAllMetas();
+        return _entries.Values
+            .Where(t => t.HostCapability == HostCapability.All || t.HostCapability == host)
+            .Select(t => new ToolMeta(t.Name, t.Description, t.Category, t.ApprovalLevel, t.HostCapability))
+            .OrderBy(t => t.Category).ThenBy(t => t.Name)
+            .ToList();
+    }
+
     /// <summary>查询工具的审批等级；未注册返回 Safe。</summary>
     public ToolApprovalLevel LevelOf(string name)
         => _entries.TryGetValue(name, out var entry) ? entry.ApprovalLevel : ToolApprovalLevel.Safe;
