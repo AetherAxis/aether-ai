@@ -182,13 +182,13 @@ Code brain 生命周期按逻辑 turn 隔离：同一 run 的多次工具调用�
 工具是「业务 / 宿主 + AI」，归 ⑭ `aether-ai-integrations`。
 
 ```csharp
-// aether-ai-integrations/src/Aether.SystemTools.AI：文件/搜索/HTTP/命令 15 个工具
+// aether-ai-integrations/src/Aether.SystemTools.AI：文件/搜索/HTTP/命令 16 个工具
 services.AddRuleBrains();
-services.AddAetherAI().AddSystemTools();                            // 全量 15 个
-// services.AddAetherAI().AddSystemTools(includeCommandTools: false); // 可移植子集 13 个
+services.AddAetherAI().AddSystemTools();                            // 全量 16 个
+// services.AddAetherAI().AddSystemTools(includeCommandTools: false); // 可移植子集 14 个
 
-// 链上钱包适配器同理：AddLedgerTools(builder, walletSeedFilePath, nodeAddress, custodyAddress)
-// （节点/custody 地址明文给，桌面填本机、手机填服务端——解析优先级 参数 > env > 默认）
+// 领域适配器同理（一个领域一个模块）：AddAppAuditTools(builder, dataDirectory, skillsDirectory)
+// （AI 线本质可调任意工具——新业务域 = ⑭ 加一个 Aether.<Domain>.AI + 一个 Add<Domain>Tools）
 ```
 
 工具清单、审批等级、宿主能力表与 `Grep`/`Glob` 的显式 `path` 约束见
